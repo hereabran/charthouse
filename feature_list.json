@@ -1,0 +1,121 @@
+{
+  "$schema_note": "Machine-readable scope boundary for helm-playground. Each feature: id (kebab), title, status (done|in_progress|planned), definition_of_done (concrete + testable), optional notes. Work one feature at a time; verify against definition_of_done before marking done.",
+  "scope_rules": {
+    "one_feature_at_a_time": true,
+    "ephemeral_data_only": true
+  },
+  "features": [
+    {
+      "id": "three-column-layout",
+      "title": "Three-column resizable layout",
+      "status": "done",
+      "definition_of_done": "App renders Toolbar (top), a three-column body, and StatusBar (footer). Body shows TemplatePanel (left), ValuesPanel (middle), RenderedOutput (right) via a CSS grid with two 6px draggable splitters. Dragging a splitter resizes columns and persists weights to localStorage 'hp:layout:weights'; double-clicking a splitter resets to DEFAULT_WEIGHTS [1,1,1.2]; below the lg breakpoint the columns collapse to a vertical stack.",
+      "notes": "src/App.tsx, src/components/layout/ThreeColumnLayout.tsx. MIN_WEIGHT 0.25."
+    },
+    {
+      "id": "monaco-editing",
+      "title": "In-browser Monaco editing of chart files",
+      "status": "done",
+      "definition_of_done": "Selecting a file in the tree opens its content in a Monaco editor (TemplatePanel, bound to files[activePath]); typing calls chart-store.setFile and the change persists to localStorage 'hp:chart'. languageFor() maps extensions: .yaml/.yml->yaml, .json->json, .tpl/.txt/NOTES.txt->handlebars, .md->markdown, else plaintext. Monaco loads from the jsDelivr CDN (monaco-editor@0.52.2) and applies gruvbox-dark/gruvbox-light themes.",
+      "notes": "src/components/editor/CodeEditor.tsx, TemplatePanel.tsx. loader.config pins vs to https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs; CDN dependency means offline use breaks the editor."
+    },
+    {
+      "id": "file-tree",
+      "title": "Chart file tree with create/delete",
+      "status": "done",
+      "definition_of_done": "FileTree builds a nested tree from Object.keys(files). User can add a file, add a folder (created as '<folder>/.gitkeep'), delete a file (active falls back to first remaining sorted key), and delete a folder (deletes all keys under prefix/), with confirm Modals for create/delete. Selecting a node sets activePath. The 'templates' dir is expanded by default.",
+      "notes": "src/components/editor/FileTree.tsx, src/store/chart-store.ts mutators. chart-store also exposes a renameFile mutator, but no rename action is wired into the FileTree UI."
+    },
+    {
+      "id": "values-and-override",
+      "title": "values.yaml and values.override.yaml tabs",
+      "status": "done",
+      "definition_of_done": "ValuesPanel shows two tabs, values.yaml and values.override.yaml; clicking a tab lazily creates the file if missing (ensureFile/addFile). The override can be removed via a confirm Modal. On render, when files['values.override.yaml'] is present and non-blank the backend parses it via loader.LoadValues and uses it as the install values (equivalent to helm -f values.override.yaml).",
+      "notes": "src/components/values/ValuesPanel.tsx; backend behavior in api/render/index.go. Constants VALUES_YAML, VALUES_OVERRIDE_YAML in src/types/chart.ts."
+    },
+    {
+      "id": "live-debounced-render",
+      "title": "Live debounced Helm render on edit",
+      "status": "done",
+      "definition_of_done": "Editing any file, releaseName, or namespace triggers a 300ms-debounced POST to /api/render (useDebouncedRender(300)); the prior request is aborted via AbortController. The backend renders the in-memory chart through the Helm v4 Go SDK in-process (action.NewInstall, DryRunStrategy=DryRunClient, storage driver 'memory') and returns {ok, stdout, stderr, durationMs, helmVersion}. render-store is updated; HTTP 422 is treated as a valid helm-error response, not an exception. A correct sample chart yields ok:true with rendered manifests in stdout.",
+      "notes": "src/lib/use-debounced-render.ts, src/lib/helm-client.ts, api/render/index.go, cmd/dev/main.go. 10s render timeout; 5 MiB body cap. helm.sh/helm/v4 v4.2.0."
+    },
+    {
+      "id": "rendered-output-viewer",
+      "title": "Rendered output viewer with per-document selection",
+      "status": "done",
+      "definition_of_done": "RenderedOutput reads render-store and shows the rendered manifest in a read-only Monaco editor at virtual path 'rendered.yaml'. stdout is split into documents on /^---\\s*$/m; a multi-select dropdown filters which documents are shown (empty selection = all). Copy uses navigator.clipboard and download produces a Blob. Errors/stderr, helmVersion, and durationMs are displayed.",
+      "notes": "src/components/output/RenderedOutput.tsx."
+    },
+    {
+      "id": "schema-validation",
+      "title": "values.schema.json validation with Monaco markers",
+      "status": "done",
+      "definition_of_done": "When values.schema.json exists, a 300ms-debounced effect runs validateValues(schemaJson, files[tab]) (Ajv compile + js-yaml load) and maps each validation error to a Monaco IMarkerData (severity Warning, source 'schema') with the YAML line resolved via the line map; markers render in the values editor and a 'schema' badge appears. Empty/non-object values or compile failure yields no markers.",
+      "notes": "src/lib/schema-validate.ts, src/components/values/ValuesPanel.tsx. Ajv used with allErrors, verbose, validateSchema:false; $schema stripped before compile."
+    },
+    {
+      "id": "upload-chart-archive",
+      "title": "Upload chart via folder, .zip, or .tgz (drag-drop or picker)",
+      "status": "done",
+      "definition_of_done": "User can load a chart by dropping a folder, single .zip, or single .tgz/.tar.gz onto the window (DropOverlay), or via the toolbar Upload menu (folder picker using webkitdirectory, or file picker accepting .zip/.tgz/.tar.gz). .zip parses via JSZip, .tgz via pako.inflate + the hand-written tar parser, folders via webkitRelativePath. The common top-level chart directory is stripped (stripChartRoot) and binary extensions (SKIP_BINARY_EXT) are skipped; parsed files replace the chart via chart-store.replaceAll. Failures show a window.alert.",
+      "notes": "src/components/upload/UploadDropzone.tsx, src/lib/chart-archive.ts."
+    },
+    {
+      "id": "import-chart-from-url",
+      "title": "Import chart from URL (server-side fetch)",
+      "status": "done",
+      "definition_of_done": "The Import modal POSTs {url} to /api/import; the Go handler resolves a direct .tgz/.tar.gz/.zip archive, a Helm repo base URL (fetches index.yaml, auto-picks the single chart or 422s listing all), or a repo+chart URL, then fetches with SSRF protection (blocks loopback/private/link-local IPs by dialing the validated resolved IP), enforces size caps (32 MiB download, 16 MiB extracted, 1000 files), max 5 re-validated redirects, strips the chart root, and requires Chart.yaml. On success {ok:true, files, source} is returned and the files replace the chart; on failure body.error is surfaced. Non-POST returns 405.",
+      "notes": "src/components/ui/ImportButton.tsx, src/lib/import-client.ts, api/import/index.go, api/import/repo.go. Intentionally allows RFC 6598 (Tailscale 100.64/10)."
+    },
+    {
+      "id": "share-short-url",
+      "title": "Share via Supabase-backed short URL",
+      "status": "done",
+      "definition_of_done": "The Share button POSTs {payload:{files,releaseName,namespace}} to /api/share; when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set the Go handler inserts a row into helm_playground_shares (id from crypto/rand over alphabet '23456789abcdefghjkmnpqrstuvwxyz', length 8) via Supabase PostgREST and returns {id}. The client builds origin + '/s/' + id and copies it to the clipboard. Loading /s/:id (id matching /^\\/s\\/([a-z0-9]{6,16})$/) GETs /api/share?id= and replaceAll's the returned payload, then history.replaceState to '/'.",
+      "notes": "src/components/share/ShareButton.tsx, src/lib/share-client.ts, api/share/index.go. Status-of-record: implemented but unverified locally (requires Supabase configured)."
+    },
+    {
+      "id": "share-hash-fallback",
+      "title": "Share via self-contained hash URL fallback",
+      "status": "done",
+      "definition_of_done": "When /api/share returns 503 (sharing unconfigured) or throws, the Share button falls back to origin + '/#h=' + base64url(pako.deflate(JSON.stringify({files,releaseName,namespace}))). On startup, decodePayloadFromHash matches /[#&]h=([A-Za-z0-9_-]+)/, inflates and JSON.parses the payload, replaceAll's it, and removes the hash via history.replaceState to location.pathname. Round-trip of a chart through encode->decode reproduces files, releaseName, and namespace.",
+      "notes": "src/lib/share-client.ts, src/App.tsx useLoadFromUrl. Status-of-record: implemented but no automated test yet."
+    },
+    {
+      "id": "gruvbox-theme-toggle",
+      "title": "Gruvbox light/dark theme with accent and corner controls",
+      "status": "done",
+      "definition_of_done": "ThemeButton toggles light/dark (theme-store.toggle adds/removes html.dark and persists 'hp:theme'), toggles sharp/rounded corners (border-store toggles html.sharp and persists 'hp:border'), and selects one of 7 accent swatches (writes CSS var --gv-accent and persists 'hp:accent'). index.html applies the persisted theme before paint to avoid a flash. Reloading the page preserves theme, accent, and corner style.",
+      "notes": "src/store/theme-store.ts, src/store/border-store.ts, src/components/theme/ThemeButton.tsx, src/styles/gruvbox.css, index.html. ACCENT_COLORS: aqua, blue, green, yellow, orange, red, purple."
+    },
+    {
+      "id": "supabase-shares-migration",
+      "title": "Supabase shares table migration",
+      "status": "done",
+      "definition_of_done": "supabase/migrations/20260609000000_helm_playground_shares.sql creates public.helm_playground_shares (id text primary key, payload jsonb not null, created_at timestamptz not null default now()), creates index helm_playground_shares_created_at_idx on created_at, and enables row level security. Applying it via 'supabase db push' against a linked project lets the service-role-keyed /api/share read and write the table (RLS bypassed by service_role; no policies defined intentionally).",
+      "notes": "supabase/migrations/20260609000000_helm_playground_shares.sql, supabase/config.toml (project_id playgrounds, Postgres 15)."
+    },
+    {
+      "id": "share-id-collision-retry",
+      "title": "Retry short-share id generation on collision",
+      "status": "planned",
+      "definition_of_done": "On /api/share POST, when Supabase rejects an insert due to a duplicate primary key, the handler regenerates a new id and retries (bounded attempts, e.g. up to 5) instead of returning a 502; a successful insert still returns {id}. A test inserting a known id and then forcing a collision confirms the handler recovers with a fresh id rather than failing.",
+      "notes": "api/share/index.go newID()/handlePost currently generate one id with no collision handling. The crypto/rand modulo bias over a 31-char alphabet is minor given the 31^8 keyspace but relevant to collision odds."
+    },
+    {
+      "id": "share-expiry-gc",
+      "title": "Expiry / garbage collection of share rows",
+      "status": "planned",
+      "definition_of_done": "Share rows in helm_playground_shares are subject to a documented retention policy: either an expiry column the loader honors (returning 404 for expired ids) or a scheduled cleanup job (e.g. delete rows older than N days using the existing created_at index). A test confirms that an expired/old row is no longer resolvable via GET /api/share?id=.",
+      "notes": "Currently rows have no expiry/GC (per clean-state-checklist.md); created_at index already exists to support an age-based sweep."
+    },
+    {
+      "id": "share-copy-link-toast",
+      "title": "Transient copy-link toast confirmation",
+      "status": "planned",
+      "definition_of_done": "After the Share button auto-copies the URL, the user sees a transient, non-blocking toast confirming 'link copied' that auto-dismisses, rather than relying solely on the modal's persistent 'copied' state. When clipboard access is blocked, the UI clearly indicates copy failed and offers manual copy. A UI test confirms the toast appears on copy and disappears after the timeout.",
+      "notes": "src/components/share/ShareButton.tsx currently shows a Modal with a copied flag and selects the input on clipboard failure; no transient toast component exists."
+    }
+  ]
+}
