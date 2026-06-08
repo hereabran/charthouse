@@ -41,6 +41,16 @@
     background: var(--gv-accent);
     filter: brightness(1.1);
   }
+  .hp-btn-danger {
+    @apply text-gv-bg;
+    background: var(--gv-red);
+    border-color: var(--gv-red);
+  }
+  .hp-btn-danger:hover {
+    background: var(--gv-red);
+    border-color: var(--gv-red);
+    filter: brightness(1.1);
+  }
   .hp-input {
     @apply px-2 py-1 text-xs rounded
            border border-gv-border bg-gv-bg text-gv-fg

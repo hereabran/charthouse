@@ -17,6 +17,7 @@ type ChartStore = {
   setFile: (path: string, content: string) => void
   renameFile: (from: string, to: string) => void
   deleteFile: (path: string) => void
+  deleteFolder: (prefix: string) => void
   addFile: (path: string, content?: string) => void
   replaceAll: (files: ChartFiles, opts?: { release?: string; namespace?: string }) => void
   setReleaseName: (name: string) => void
