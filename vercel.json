@@ -4,7 +4,7 @@
     { "source": "/s/:id", "destination": "/" }
   ],
   "functions": {
-    "api/render.ts": { "maxDuration": 15, "memory": 1024 },
-    "api/share.ts": { "maxDuration": 10, "memory": 256 }
+    "api/render/index.go": { "maxDuration": 15, "memory": 1024 },
+    "api/share/index.go": { "maxDuration": 10, "memory": 256 }
   }
 }

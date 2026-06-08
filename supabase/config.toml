@@ -1,0 +1,11 @@
+# Supabase CLI configuration. This file is checked in; the actual project
+# linkage (project-ref) lives in .supabase/ which is gitignored.
+#
+# Workflow:
+#   supabase link --project-ref <your-project-ref>
+#   supabase db push     # applies supabase/migrations/*.sql to the linked DB
+
+project_id = "playgrounds"
+
+[db]
+major_version = 15

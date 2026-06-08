@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n vite,api -c cyan,magenta \"pnpm dev:vite\" \"pnpm dev:api\"",
+    "dev": "concurrently -k -n vite,api -c cyan,green \"pnpm dev:vite\" \"pnpm dev:api\"",
     "dev:vite": "vite",
-    "dev:api": "tsx watch server/dev.ts",
+    "dev:api": "go run ./cmd/dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -14,13 +14,10 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@supabase/supabase-js": "^2.49.4",
     "clsx": "^2.1.1",
-    "dotenv": "^16.4.7",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
-    "nanoid": "^5.0.9",
     "pako": "^2.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -37,7 +34,6 @@
     "concurrently": "^9.1.2",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vite": "^6.1.0"
   },

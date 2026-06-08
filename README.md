@@ -20,22 +20,22 @@ persistent storage — drop a chart, render, share, walk away.
 
 ```
 src/        Vite + React + TS frontend
-api/        Vercel-style serverless handlers (also used by dev server)
-  render.ts → spawn `helm template <release> <chartDir> --namespace <ns> [-f values.override.yaml]`
-  share.ts  → Supabase-backed short URLs
-server/dev.ts  Local dev API server (port 5174). Vite proxies /api/* to it.
+api/        Vercel-style Go serverless functions
+  render/index.go → Helm SDK render equivalent of `helm template <release> <chartDir> --namespace <ns> [-f values.override.yaml]`
+  share/index.go  → Supabase-backed short URLs (PostgREST, no SDK)
+cmd/dev/main.go   Local Go dev API server (port 5174). Vite proxies /api/* to it.
 ```
 
 Render strategy: the API writes the in-memory chart files to a temp directory,
-spawns `helm template` via `child_process`, returns `{ ok, stdout, stderr, durationMs, helmVersion }`.
+renders through the Helm Go SDK, and returns `{ ok, stdout, stderr, durationMs, helmVersion }`.
 
 Limits: 500 files, 256 KiB per file, 4 MiB total, 10s timeout.
 
 ## Prereqs
 
-- `pnpm` 9+
-- `node` 20+
-- `helm` 3.x or 4.x on PATH (override with `HELM_BIN`)
+- `pnpm` 11+
+- `node` 22.13+ for the pinned `pnpm` 11.x release
+- `go` 1.26+ for the API
 
 ```sh
 pnpm install
@@ -45,7 +45,7 @@ pnpm dev
 This starts:
 
 - Vite on `http://localhost:5173`
-- Dev API on `http://localhost:5174` (proxied at `/api/*`)
+- Go dev API on `http://localhost:5174` (proxied at `/api/*`)
 
 Open `http://localhost:5173`. The sample chart renders immediately.
 
@@ -69,18 +69,17 @@ You should get `{ "ok": true, "stdout": "...ConfigMap...", "stderr": "...", "dur
 
 ## Deploy: Vercel + Supabase
 
-1. **Supabase**: create a project; run this SQL once:
+1. **Supabase**: create a project, then apply the schema via the Supabase CLI:
 
-   ```sql
-   create table if not exists helm_playground_shares (
-     id text primary key,
-     payload jsonb not null,
-     created_at timestamptz not null default now()
-   );
-   -- Optional retention: drop shares older than 30 days.
-   create index if not exists helm_playground_shares_created_at_idx
-     on helm_playground_shares (created_at);
+   ```sh
+   supabase link --project-ref <your-project-ref>
+   supabase db push
    ```
+
+   The schema lives in [`supabase/migrations/`](./supabase/migrations) — the
+   initial migration creates `public.helm_playground_shares` and enables RLS.
+   The Go `/api/share` function uses the `service_role` key, which bypasses
+   RLS; anon/authenticated keys cannot reach the table.
 
    Grab `Project URL` and the **service role** key (server-side only).
 
@@ -91,16 +90,13 @@ You should get `{ "ok": true, "stdout": "...ConfigMap...", "stderr": "...", "dur
    SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
    ```
 
-   The `api/*.ts` handlers run as Node serverless functions. `vercel.json`
-   already rewrites `/s/:id` to `/` so the SPA can resolve the share on load.
+   The share handler is a Go Vercel Function that talks to Supabase via
+   PostgREST — no client SDK on the server. `vercel.json` already rewrites
+   `/s/:id` to `/` so the SPA can resolve the share on load.
 
-3. **Helm binary on Vercel**: the default Node runtime does **not** ship `helm`.
-   Use one of:
-   - Set `HELM_BIN` to a path you bundle in `api/` (commit the linux/amd64 binary).
-   - Or deploy the API on a host that has `helm` available (Render, Fly, Railway, your own VM) and point Vite at it via a rewrite.
-
-   For local dev and self-hosted deployments where `helm` is on PATH, no extra
-   config is needed.
+3. **Render API**: `/api/render` is a Go Vercel Function backed by the Helm
+   SDK. Vercel builds it from `api/render/index.go` using the root `go.mod`,
+   so no Helm CLI binary or `HELM_BIN` setting is required.
 
 ## Hosting without Supabase
 
@@ -113,10 +109,13 @@ The app decodes it on load and removes the hash from history.
 ```
 .
 ├── api/
-│   ├── _lib/{helm,supabase,json-handler}.ts
-│   ├── render.ts
-│   └── share.ts
-├── server/dev.ts
+│   ├── render/index.go
+│   └── share/index.go
+├── cmd/dev/main.go
+├── supabase/
+│   ├── config.toml
+│   └── migrations/
+│       └── 20260609000000_helm_playground_shares.sql
 ├── src/
 │   ├── App.tsx
 │   ├── main.tsx
@@ -126,6 +125,8 @@ The app decodes it on load and removes the hash from history.
 │   ├── styles/{globals,gruvbox}.css
 │   └── types/chart.ts
 ├── vercel.json
+├── go.mod
+├── go.sum
 ├── vite.config.ts
 └── package.json
 ```

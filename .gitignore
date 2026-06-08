@@ -13,3 +13,11 @@ dist-ssr
 .idea
 coverage
 .claude
+
+# tsc -b incremental caches; regenerated on every build
+*.tsbuildinfo
+
+# Supabase CLI local state (linkage, generated types, etc.)
+.supabase
+.branches
+.temp
