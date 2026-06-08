@@ -1,0 +1,1 @@
+{"root":["./vite.config.ts","./server/dev.ts","./api/render.ts","./api/share.ts","./api/_lib/helm.ts","./api/_lib/json-handler.ts","./api/_lib/supabase.ts"],"version":"5.9.3"}

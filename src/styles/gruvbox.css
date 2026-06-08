@@ -1,0 +1,48 @@
+/*
+ * Gruvbox palette — terminal/server vibe.
+ * https://github.com/morhetz/gruvbox
+ */
+
+:root {
+  /* Light (Gruvbox light, "hard") */
+  --gv-bg:     #f9f5d7;
+  --gv-bg2:   #f2e5bc;
+  --gv-bg3:   #ebdbb2;
+  --gv-fg:    #3c3836;
+  --gv-fg2:   #504945;
+  --gv-dim:   #7c6f64;
+  --gv-border: #d5c4a1;
+
+  --gv-red:    #9d0006;
+  --gv-green:  #79740e;
+  --gv-yellow: #b57614;
+  --gv-blue:   #076678;
+  --gv-purple: #8f3f71;
+  --gv-aqua:   #427b58;
+  --gv-orange: #af3a03;
+  --gv-accent: var(--gv-aqua);
+
+  color-scheme: light;
+}
+
+html.dark {
+  /* Dark (Gruvbox dark, "hard") */
+  --gv-bg:     #1d2021;
+  --gv-bg2:   #282828;
+  --gv-bg3:   #32302f;
+  --gv-fg:    #ebdbb2;
+  --gv-fg2:   #d5c4a1;
+  --gv-dim:   #928374;
+  --gv-border: #3c3836;
+
+  --gv-red:    #fb4934;
+  --gv-green:  #b8bb26;
+  --gv-yellow: #fabd2f;
+  --gv-blue:   #83a598;
+  --gv-purple: #d3869b;
+  --gv-aqua:   #8ec07c;
+  --gv-orange: #fe8019;
+  --gv-accent: var(--gv-aqua);
+
+  color-scheme: dark;
+}

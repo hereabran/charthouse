@@ -1,0 +1,61 @@
+@import './gruvbox.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-feature-settings: 'liga' 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Scrollbar tuned to Gruvbox */
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--gv-border);
+    border-radius: 6px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--gv-dim); }
+  ::selection { background: var(--gv-accent); color: var(--gv-bg); }
+}
+
+@layer components {
+  .hp-btn {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded
+           border border-gv-border bg-gv-bg2 text-gv-fg
+           hover:bg-gv-bg3 hover:border-gv-dim
+           focus:outline-none focus:ring-1 focus:ring-gv-accent
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .hp-btn-primary {
+    @apply text-gv-bg border-gv-accent;
+    background: var(--gv-accent);
+  }
+  .hp-btn-primary:hover {
+    background: var(--gv-accent);
+    filter: brightness(1.1);
+  }
+  .hp-input {
+    @apply px-2 py-1 text-xs rounded
+           border border-gv-border bg-gv-bg text-gv-fg
+           placeholder-gv-dim
+           focus:outline-none focus:ring-1 focus:ring-gv-accent;
+  }
+  .hp-panel {
+    @apply flex flex-col h-full min-h-0 bg-gv-bg2 border border-gv-border rounded;
+  }
+  .hp-panel-header {
+    @apply flex items-center justify-between gap-2 px-3 py-1.5
+           border-b border-gv-border text-[11px] uppercase tracking-wider text-gv-dim
+           shrink-0;
+  }
+  .hp-chip {
+    @apply px-1.5 py-0.5 text-[10px] rounded border border-gv-border text-gv-dim;
+  }
+}
