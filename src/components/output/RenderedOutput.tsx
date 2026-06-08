@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Copy, Download, Loader2, TriangleAlert } from 'lucide-react'
+import { Copy, Download, ChevronDown, Loader2, TriangleAlert } from 'lucide-react'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { useRenderStore } from '@/store/render-store'
 
@@ -8,7 +8,6 @@ type Doc = { kind: string; name: string; source: string; body: string }
 
 function splitDocs(stdout: string): Doc[] {
   if (!stdout.trim()) return []
-  // Helm separates docs with "---". Capture "# Source:" comment for context.
   const parts = stdout.split(/^---\s*$/m)
   const docs: Doc[] = []
   for (const raw of parts) {
@@ -29,14 +28,41 @@ function splitDocs(stdout: string): Doc[] {
 
 export function RenderedOutput() {
   const { loading, ok, stdout, stderr, durationMs, error, helmVersion, lastRenderedAt } = useRenderStore()
-  const [selected, setSelected] = useState(0)
-  const [showAll, setShowAll] = useState(true)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const docs = useMemo(() => splitDocs(stdout), [stdout])
-  const safeSelected = Math.min(selected, Math.max(0, docs.length - 1))
-  const activeBody = showAll
-    ? docs.map((d) => d.body).join('---\n')
-    : docs[safeSelected]?.body ?? ''
+
+  const allSelected = selected.size === 0
+  const activeIndices = allSelected
+    ? docs.map((_, i) => i)
+    : Array.from(selected)
+  const activeBody = activeIndices.map((i) => docs[i]?.body).join('---\n')
+
+  const toggleDoc = useCallback((index: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }, [])
+
+  const toggleAll = useCallback(() => {
+    setSelected((prev) => (prev.size > 0 ? new Set() : new Set(docs.map((_, i) => i))))
+  }, [docs])
+
+  useEffect(() => {
+    if (!dropdownOpen) return
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dropdownOpen])
 
   function copy() {
     navigator.clipboard.writeText(activeBody).catch(() => {})
@@ -46,7 +72,12 @@ export function RenderedOutput() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = showAll ? 'rendered.yaml' : `${docs[safeSelected]?.kind ?? 'doc'}-${docs[safeSelected]?.name ?? safeSelected}.yaml`
+    if (allSelected) {
+      a.download = 'rendered.yaml'
+    } else {
+      const names = activeIndices.map((i) => docs[i]?.name ?? i).join('+')
+      a.download = `${names}.yaml`
+    }
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -77,29 +108,47 @@ export function RenderedOutput() {
         </div>
       )}
 
-      <div className="flex items-center gap-1 px-3 py-1 border-b border-gv-border overflow-x-auto shrink-0">
+      <div ref={dropdownRef} className="relative px-3 py-1 border-b border-gv-border shrink-0">
         <button
-          className={clsx(
-            'hp-chip whitespace-nowrap cursor-pointer transition-colors',
-            showAll && 'border-gv-accent text-gv-accent',
-          )}
-          onClick={() => setShowAll(true)}
+          className="hp-btn w-full justify-between"
+          onClick={() => setDropdownOpen((o) => !o)}
         >
-          all ({docs.length})
+          <span>
+            {allSelected
+              ? `all (${docs.length})`
+              : `${selected.size} of ${docs.length} selected`}
+          </span>
+          <ChevronDown size={12} className={clsx('transition-transform', dropdownOpen && 'rotate-180')} />
         </button>
-        {docs.map((d, i) => (
-          <button
-            key={i}
-            className={clsx(
-              'hp-chip whitespace-nowrap cursor-pointer transition-colors',
-              !showAll && i === safeSelected && 'border-gv-accent text-gv-accent',
-            )}
-            onClick={() => { setShowAll(false); setSelected(i) }}
-            title={d.source}
-          >
-            {d.kind}/{d.name}
-          </button>
-        ))}
+
+        {dropdownOpen && docs.length > 0 && (
+          <div className="absolute left-3 right-3 top-full z-10 mt-1 bg-gv-bg2 border border-gv-border max-h-60 overflow-auto">
+            <label className="flex items-center gap-2 px-2 py-1 text-[11px] text-gv-fg hover:bg-gv-bg3 cursor-pointer border-b border-gv-border">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="accent-[var(--gv-accent)]"
+              />
+              <span className="text-gv-dim">all ({docs.length})</span>
+            </label>
+            {docs.map((d, i) => (
+              <label
+                key={i}
+                className="flex items-center gap-2 px-2 py-1 text-[11px] text-gv-fg hover:bg-gv-bg3 cursor-pointer"
+                title={d.source}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(i)}
+                  onChange={() => toggleDoc(i)}
+                  className="accent-[var(--gv-accent)]"
+                />
+                <span>{d.kind}/{d.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">

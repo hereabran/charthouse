@@ -1,11 +1,37 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, File, FilePlus, FolderPlus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  FileBadge,
+  FileCode,
+  FileJson,
+  FileText,
+  FilePen,
+  FilePlus,
+  FileX,
+  FolderPlus,
+  Trash2,
+} from 'lucide-react'
 import clsx from 'clsx'
-import { useChartStore, isValuesFile } from '@/store/chart-store'
+import { useChartStore, isValuesFile, isChartYaml } from '@/store/chart-store'
+import { Modal } from '@/components/ui/Modal'
 
 type Node =
   | { kind: 'dir'; name: string; path: string; children: Node[] }
   | { kind: 'file'; name: string; path: string }
+
+function iconForFile(name: string): ReactNode {
+  if (isChartYaml(name)) return <FileBadge size={12} className="text-gv-aqua shrink-0" />
+  if (name.endsWith('.yaml') || name.endsWith('.yml'))
+    return <FileCode size={12} className="text-gv-yellow shrink-0" />
+  if (name.endsWith('.json')) return <FileJson size={12} className="text-gv-blue shrink-0" />
+  if (name.endsWith('.tpl')) return <FileText size={12} className="text-gv-green shrink-0" />
+  if (name.endsWith('.md')) return <FilePen size={12} className="text-gv-green shrink-0" />
+  if (name.endsWith('.helmignore')) return <FileX size={12} className="text-gv-dim shrink-0" />
+  if (name.endsWith('.txt')) return <FileText size={12} className="text-gv-dim shrink-0" />
+  return <File size={12} className="text-gv-fg shrink-0" />
+}
 
 function buildTree(paths: string[]): Node[] {
   const root: Node[] = []
@@ -49,7 +75,22 @@ export function FileTree() {
   const setActivePath = useChartStore((s) => s.setActivePath)
   const addFile = useChartStore((s) => s.addFile)
   const deleteFile = useChartStore((s) => s.deleteFile)
+  const deleteFolder = useChartStore((s) => s.deleteFolder)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ templates: true })
+  const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: 'file' | 'folder' } | null>(null)
+  const [createMode, setCreateMode] = useState<{ kind: 'file' | 'folder'; parent: string } | null>(null)
+  const [createValue, setCreateValue] = useState('')
+  const [createError, setCreateError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (createMode) {
+      setCreateError('')
+      const ref = createMode.kind === 'file' ? fileInputRef : folderInputRef
+      setTimeout(() => ref.current?.focus(), 0)
+    }
+  }, [createMode])
 
   const tree = useMemo(() => buildTree(Object.keys(files)), [files])
 
@@ -58,25 +99,52 @@ export function FileTree() {
   }
 
   function promptNewFile(parent: string) {
-    const suggested = parent ? `${parent}/new.yaml` : 'new.yaml'
-    const name = window.prompt('New file path:', suggested)
-    if (!name) return
-    if (files[name] !== undefined) {
-      window.alert('File already exists')
-      return
-    }
-    addFile(name, '')
+    setCreateMode({ kind: 'file', parent })
+    setCreateValue(parent ? `${parent}/` : '')
   }
 
   function promptNewFolder(parent: string) {
-    const suggested = parent ? `${parent}/new-folder/.gitkeep` : 'new-folder/.gitkeep'
-    const name = window.prompt('New file path (folder is created from path):', suggested)
-    if (!name) return
-    addFile(name, '')
+    setCreateMode({ kind: 'folder', parent })
+    setCreateValue(parent ? `${parent}/` : '')
   }
 
-  function confirmDelete(path: string) {
-    if (window.confirm(`Delete ${path}?`)) deleteFile(path)
+  function handleConfirmCreate() {
+    if (!createMode) return
+    const val = createValue.trim()
+    if (!val) {
+      setCreateError('Path cannot be empty')
+      return
+    }
+    if (createMode.kind === 'file') {
+      if (files[val] !== undefined) {
+        setCreateError('File already exists')
+        return
+      }
+      addFile(val, '')
+    } else {
+      const folderPath = val.endsWith('/') ? val.slice(0, -1) : val
+      const gitkeep = `${folderPath}/.gitkeep`
+      if (files[gitkeep] !== undefined) {
+        setCreateError('Folder already exists')
+        return
+      }
+      addFile(gitkeep, '')
+    }
+    setCreateMode(null)
+  }
+
+  function confirmDelete(path: string, kind: 'file' | 'folder') {
+    setDeleteTarget({ path, kind })
+  }
+
+  function handleConfirmDelete() {
+    if (!deleteTarget) return
+    if (deleteTarget.kind === 'folder') {
+      deleteFolder(deleteTarget.path)
+    } else {
+      deleteFile(deleteTarget.path)
+    }
+    setDeleteTarget(null)
   }
 
   function renderNodes(nodes: Node[], depth: number): React.ReactNode {
@@ -107,6 +175,13 @@ export function FileTree() {
                 >
                   <FolderPlus size={12} />
                 </button>
+                <button
+                  className="hover:text-gv-red"
+                  title="Delete folder"
+                  onClick={(e) => { e.stopPropagation(); confirmDelete(n.path, 'folder') }}
+                >
+                  <Trash2 size={12} />
+                </button>
               </span>
             </div>
             {open && renderNodes(n.children, depth + 1)}
@@ -126,12 +201,12 @@ export function FileTree() {
           style={{ paddingLeft: 4 + depth * 12 + 14 }}
           onClick={() => setActivePath(n.path)}
         >
-          <File size={12} className="opacity-70 shrink-0" />
+          {iconForFile(n.name)}
           <span className="truncate">{n.name}</span>
           <button
             className="ml-auto opacity-0 group-hover:opacity-100 hover:text-gv-red"
             title="Delete"
-            onClick={(e) => { e.stopPropagation(); confirmDelete(n.path) }}
+            onClick={(e) => { e.stopPropagation(); confirmDelete(n.path, 'file') }}
           >
             <Trash2 size={12} />
           </button>
@@ -154,6 +229,76 @@ export function FileTree() {
         </span>
       </div>
       {renderNodes(tree, 0)}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget?.kind === 'folder' ? 'Delete folder?' : 'Delete file?'}
+        icon={<Trash2 size={12} className="text-gv-red" />}
+        width="sm"
+        footer={
+          <>
+            <button className="hp-btn" onClick={() => setDeleteTarget(null)}>Cancel</button>
+            <button className="hp-btn hp-btn-danger" onClick={handleConfirmDelete}>Delete</button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <p className="text-gv-fg">
+            {deleteTarget.kind === 'folder'
+              ? <>This will permanently delete the folder <span className="text-gv-yellow font-bold">{deleteTarget.path}/</span> and all its contents.</>
+              : <>This will permanently delete <span className="text-gv-yellow font-bold">{deleteTarget.path}</span>.</>
+            }
+          </p>
+        )}
+      </Modal>
+      <Modal
+        open={createMode?.kind === 'file'}
+        onClose={() => setCreateMode(null)}
+        title="New file"
+        icon={<FilePlus size={12} className="text-gv-aqua" />}
+        width="sm"
+        footer={
+          <>
+            <button className="hp-btn" onClick={() => setCreateMode(null)}>Cancel</button>
+            <button className="hp-btn hp-btn-primary" onClick={handleConfirmCreate}>Create</button>
+          </>
+        }
+      >
+        <label className="block text-gv-dim text-[10px] uppercase tracking-wider mb-1">File path</label>
+        <input
+          ref={fileInputRef}
+          type="text"
+          value={createValue}
+          onChange={(e) => { setCreateValue(e.target.value); setCreateError('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmCreate() }}
+          className="hp-input w-full"
+        />
+        {createError && <p className="mt-1.5 text-[11px] text-gv-red">{createError}</p>}
+      </Modal>
+      <Modal
+        open={createMode?.kind === 'folder'}
+        onClose={() => setCreateMode(null)}
+        title="New folder"
+        icon={<FolderPlus size={12} className="text-gv-aqua" />}
+        width="sm"
+        footer={
+          <>
+            <button className="hp-btn" onClick={() => setCreateMode(null)}>Cancel</button>
+            <button className="hp-btn hp-btn-primary" onClick={handleConfirmCreate}>Create</button>
+          </>
+        }
+      >
+        <label className="block text-gv-dim text-[10px] uppercase tracking-wider mb-1">Folder name</label>
+        <input
+          ref={folderInputRef}
+          type="text"
+          value={createValue}
+          onChange={(e) => { setCreateValue(e.target.value); setCreateError('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmCreate() }}
+          className="hp-input w-full"
+        />
+        {createError && <p className="mt-1.5 text-[11px] text-gv-red">{createError}</p>}
+      </Modal>
     </div>
   )
 }

@@ -19,23 +19,21 @@ const widthMap = {
 
 export function Modal({ open, onClose, title, icon, children, footer, width = 'md' }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     const prev = document.activeElement as HTMLElement | null
-    const focusable = cardRef.current?.querySelector<HTMLElement>(
-      'input, button, textarea, [tabindex]:not([tabindex="-1"])',
-    )
-    focusable?.focus()
     return () => {
       window.removeEventListener('keydown', onKey)
       prev?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

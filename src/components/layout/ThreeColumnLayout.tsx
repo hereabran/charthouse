@@ -112,21 +112,21 @@ export function ThreeColumnLayout({ left, middle, right }: Props) {
         className="hidden lg:grid flex-1 min-h-0 p-2"
         style={{ gridTemplateColumns: cols }}
       >
-        <section className="min-w-0 min-h-0">{left}</section>
+        <section className="min-w-0 min-h-0 overflow-hidden">{left}</section>
         <Splitter
           onPointerDown={onSplitterDown(0)}
           onPointerMove={onSplitterMove}
           onPointerUp={onSplitterUp}
           onDoubleClick={resetSizes}
         />
-        <section className="min-w-0 min-h-0">{middle}</section>
+        <section className="min-w-0 min-h-0 overflow-hidden">{middle}</section>
         <Splitter
           onPointerDown={onSplitterDown(1)}
           onPointerMove={onSplitterMove}
           onPointerUp={onSplitterUp}
           onDoubleClick={resetSizes}
         />
-        <section className="min-w-0 min-h-0">{right}</section>
+        <section className="min-w-0 min-h-0 overflow-hidden">{right}</section>
       </div>
     </>
   )

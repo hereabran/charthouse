@@ -30,6 +30,109 @@ resources:
 env:
   GREETING: "hello from helm playground"
 `,
+  'values.schema.json': `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "description": "Number of pod replicas",
+      "minimum": 1
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override the chart name"
+    },
+    "image": {
+      "type": "object",
+      "description": "Container image configuration",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Docker image repository"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Docker image tag"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "description": "Image pull policy"
+        }
+      },
+      "required": ["repository", "tag", "pullPolicy"],
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "description": "Kubernetes Service configuration",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "description": "Kubernetes Service type"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Service port",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": ["type", "port"],
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "description": "Container resource limits and requests",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "description": "CPU limit (e.g. 200m)"
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory limit (e.g. 128Mi)"
+            }
+          },
+          "required": ["cpu", "memory"],
+          "additionalProperties": false
+        },
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "description": "CPU request (e.g. 50m)"
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory request (e.g. 64Mi)"
+            }
+          },
+          "required": ["cpu", "memory"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["limits", "requests"],
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables injected into the container",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["replicaCount", "image", "service", "resources"],
+  "additionalProperties": false
+}
+`,
   'values.override.yaml': `# Optional overrides applied after values.yaml.
 # Example:
 # replicaCount: 5

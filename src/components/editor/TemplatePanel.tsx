@@ -13,11 +13,11 @@ export function TemplatePanel() {
         <span>chart</span>
         <span className="hp-chip">{Object.keys(files).length} files</span>
       </div>
-      <div className="flex-1 min-h-0 grid grid-rows-[minmax(120px,40%)_1fr]">
+      <div className="flex-1 min-h-0 grid grid-rows-[minmax(120px,40%)_1fr] overflow-hidden">
         <div className="border-b border-gv-border min-h-0 overflow-hidden flex flex-col">
           <FileTree />
         </div>
-        <div className="min-h-0 flex flex-col">
+        <div className="min-w-0 min-h-0 flex flex-col">
           <div className="flex items-center justify-between px-3 py-1 border-b border-gv-border text-[11px] text-gv-dim">
             <span className="truncate">{activePath || '(no file selected)'}</span>
             {activePath && isValuesFile(activePath) && (

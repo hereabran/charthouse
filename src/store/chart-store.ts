@@ -55,6 +55,20 @@ export const useChartStore = create<ChartStore>()(
             activePath: s.activePath === path ? remaining[0] ?? '' : s.activePath,
           }
         }),
+      deleteFolder: (prefix) =>
+        set((s) => {
+          const dirPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`
+          const remaining: ChartFiles = {}
+          for (const [k, v] of Object.entries(s.files)) {
+            if (!k.startsWith(dirPrefix)) remaining[k] = v
+          }
+          const remainingKeys = Object.keys(remaining).sort()
+          const activeStillExists = s.activePath in remaining
+          return {
+            files: remaining,
+            activePath: activeStillExists ? s.activePath : remainingKeys[0] ?? '',
+          }
+        }),
       addFile: (path, content = '') =>
         set((s) => {
           if (path in s.files) return s

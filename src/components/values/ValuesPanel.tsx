@@ -1,8 +1,14 @@
 import { useChartStore } from '@/store/chart-store'
 import { VALUES_OVERRIDE_YAML, VALUES_YAML } from '@/types/chart'
 import { CodeEditor } from '@/components/editor/CodeEditor'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import clsx from 'clsx'
+import { validateValues } from '@/lib/schema-validate'
+import type { editor } from 'monaco-editor'
+import { Trash2 } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
+
+const SCHEMA_FILE = 'values.schema.json'
 
 type Tab = typeof VALUES_YAML | typeof VALUES_OVERRIDE_YAML
 
@@ -12,9 +18,30 @@ export function ValuesPanel() {
   const addFile = useChartStore((s) => s.addFile)
   const deleteFile = useChartStore((s) => s.deleteFile)
   const [tab, setTab] = useState<Tab>(VALUES_YAML)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const hasOverride = VALUES_OVERRIDE_YAML in files
   const hasValues = VALUES_YAML in files
+  const schemaJson = files[SCHEMA_FILE]
+  const hasSchema = !!schemaJson
+
+  const [markers, setMarkers] = useState<editor.IMarkerData[]>([])
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!schemaJson) {
+      setMarkers([])
+      return
+    }
+    const content = files[tab] ?? ''
+    timerRef.current = setTimeout(() => {
+      setMarkers(validateValues(schemaJson, content))
+    }, 300)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [schemaJson, files[tab], tab])
 
   function ensureFile(path: Tab) {
     if (!(path in files)) addFile(path, '')
@@ -26,6 +53,11 @@ export function ValuesPanel() {
       <div className="hp-panel-header">
         <span>values</span>
         <div className="flex items-center gap-1">
+          {hasSchema && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gv-yellow/20 text-gv-yellow" title="values.schema.json detected — validation active">
+              schema
+            </span>
+          )}
           <button
             className={clsx(
               'hp-chip cursor-pointer transition-colors',
@@ -55,12 +87,7 @@ export function ValuesPanel() {
           {tab === VALUES_OVERRIDE_YAML && hasOverride && (
             <button
               className="text-gv-dim hover:text-gv-red text-[10px]"
-              onClick={() => {
-                if (window.confirm('Delete values.override.yaml?')) {
-                  deleteFile(VALUES_OVERRIDE_YAML)
-                  setTab(VALUES_YAML)
-                }
-              }}
+              onClick={() => setShowDeleteModal(true)}
             >
               remove
             </button>
@@ -73,6 +100,7 @@ export function ValuesPanel() {
               value={files[tab] ?? ''}
               onChange={(v) => setFile(tab, v)}
               ariaLabel={`Editor for ${tab}`}
+              markers={hasSchema ? markers : undefined}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gv-dim text-xs">
@@ -83,6 +111,32 @@ export function ValuesPanel() {
           )}
         </div>
       </div>
+      <Modal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete file?"
+        icon={<Trash2 size={12} className="text-gv-red" />}
+        width="sm"
+        footer={
+          <>
+            <button className="hp-btn" onClick={() => setShowDeleteModal(false)}>Cancel</button>
+            <button
+              className="hp-btn hp-btn-danger"
+              onClick={() => {
+                deleteFile(VALUES_OVERRIDE_YAML)
+                setTab(VALUES_YAML)
+                setShowDeleteModal(false)
+              }}
+            >
+              Delete
+            </button>
+          </>
+        }
+      >
+        <p className="text-gv-fg">
+          This will permanently delete <span className="text-gv-yellow font-bold">{VALUES_OVERRIDE_YAML}</span>.
+        </p>
+      </Modal>
     </div>
   )
 }

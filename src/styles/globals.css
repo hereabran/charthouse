@@ -4,6 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --hp-radius: 4px;
+  --hp-radius-md: 6px;
+  --hp-radius-lg: 8px;
+}
+
 @layer base {
   html, body, #root {
     height: 100%;
@@ -25,13 +31,29 @@
   ::selection { background: var(--gv-accent); color: var(--gv-bg); }
 }
 
+html.sharp {
+  --hp-radius: 0px;
+  --hp-radius-md: 0px;
+  --hp-radius-lg: 0px;
+}
+
+html.sharp .rounded,
+html.sharp .rounded-md,
+html.sharp .rounded-lg,
+html.sharp .rounded-sm,
+html.sharp .rounded-xl,
+html.sharp .rounded-full {
+  border-radius: 0 !important;
+}
+
 @layer components {
   .hp-btn {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs
            border border-gv-border bg-gv-bg2 text-gv-fg
            hover:bg-gv-bg3 hover:border-gv-dim
            focus:outline-none focus:ring-1 focus:ring-gv-accent
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    border-radius: var(--hp-radius);
   }
   .hp-btn-primary {
     @apply text-gv-bg border-gv-accent;
@@ -52,13 +74,15 @@
     filter: brightness(1.1);
   }
   .hp-input {
-    @apply px-2 py-1 text-xs rounded
+    @apply px-2 py-1 text-xs
            border border-gv-border bg-gv-bg text-gv-fg
            placeholder-gv-dim
            focus:outline-none focus:ring-1 focus:ring-gv-accent;
+    border-radius: var(--hp-radius);
   }
   .hp-panel {
-    @apply flex flex-col h-full min-h-0 bg-gv-bg2 border border-gv-border rounded;
+    @apply flex flex-col h-full min-h-0 overflow-hidden bg-gv-bg2 border border-gv-border;
+    border-radius: var(--hp-radius);
   }
   .hp-panel-header {
     @apply flex items-center justify-between gap-2 px-3 py-1.5
@@ -66,6 +90,7 @@
            shrink-0;
   }
   .hp-chip {
-    @apply px-1.5 py-0.5 text-[10px] rounded border border-gv-border text-gv-dim;
+    @apply px-1.5 py-0.5 text-[10px] border border-gv-border text-gv-dim;
+    border-radius: var(--hp-radius);
   }
 }

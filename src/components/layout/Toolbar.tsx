@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Github, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useChartStore } from '@/store/chart-store'
-import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { ThemeButton } from '@/components/theme/ThemeButton'
+import { ImportButton } from '@/components/ui/ImportButton'
 import { UploadButton } from '@/components/upload/UploadDropzone'
 import { ShareButton } from '@/components/share/ShareButton'
 import { Modal } from '@/components/ui/Modal'
@@ -43,6 +44,7 @@ export function Toolbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <ImportButton />
         <UploadButton />
         <button
           className="hp-btn"
@@ -53,7 +55,7 @@ export function Toolbar() {
           <span>reset</span>
         </button>
         <ShareButton />
-        <ThemeToggle />
+        <ThemeButton />
         <a
           className="hp-btn"
           href="https://helm.sh/docs/chart_template_guide/"
