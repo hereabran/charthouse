@@ -1,8 +1,8 @@
-// Package store provides pluggable persistence for share payloads, selected at
+// Package share provides pluggable persistence for share payloads, selected at
 // runtime via the SHARE_STORE environment variable. It keeps Charthouse
 // vendor-neutral: the default works with zero configuration and no external
 // service, while file and Supabase backends are opt-in.
-package store
+package share
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type Store interface {
 	Get(ctx context.Context, id string) (payload json.RawMessage, err error)
 }
 
-// New selects a Store from the environment:
+// newStore selects a Store from the environment:
 //
 //	SHARE_STORE=memory   (default) ephemeral in-process map — links die on restart
 //	SHARE_STORE=file     JSON files under SHARE_DIR (default ./data/shares)
@@ -45,7 +45,7 @@ type Store interface {
 //
 // An error here is surfaced by the handler as 503 so the SPA falls back to
 // self-contained hash URLs.
-func New() (Store, error) {
+func newStore() (Store, error) {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARE_STORE"))) {
 	case "", "memory":
 		return newMemoryStore(), nil

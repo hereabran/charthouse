@@ -1,4 +1,4 @@
-package store
+package share
 
 import (
 	"context"

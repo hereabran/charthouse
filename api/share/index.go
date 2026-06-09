@@ -6,19 +6,17 @@ import (
 	"errors"
 	"net/http"
 	"sync"
-
-	"charthouse/api/share/store"
 )
 
 var (
-	sharedStore     store.Store
+	sharedStore     Store
 	sharedStoreErr  error
 	sharedStoreOnce sync.Once
 )
 
-func getStore() (store.Store, error) {
+func getStore() (Store, error) {
 	sharedStoreOnce.Do(func() {
-		sharedStore, sharedStoreErr = store.New()
+		sharedStore, sharedStoreErr = newStore()
 	})
 	return sharedStore, sharedStoreErr
 }
@@ -50,16 +48,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleGet(w http.ResponseWriter, r *http.Request, s store.Store) {
+func handleGet(w http.ResponseWriter, r *http.Request, s Store) {
 	id := r.URL.Query().Get("id")
-	if !store.IDPattern.MatchString(id) {
+	if !IDPattern.MatchString(id) {
 		sendJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid id"})
 		return
 	}
 
 	payload, err := s.Get(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			sendJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
 			return
 		}
@@ -70,8 +68,8 @@ func handleGet(w http.ResponseWriter, r *http.Request, s store.Store) {
 	sendJSON(w, http.StatusOK, map[string]any{"id": id, "payload": payload})
 }
 
-func handlePost(w http.ResponseWriter, r *http.Request, s store.Store) {
-	body := http.MaxBytesReader(w, r.Body, store.MaxPayloadBytes)
+func handlePost(w http.ResponseWriter, r *http.Request, s Store) {
+	body := http.MaxBytesReader(w, r.Body, MaxPayloadBytes)
 	var parsed struct {
 		Payload json.RawMessage `json:"payload"`
 	}
