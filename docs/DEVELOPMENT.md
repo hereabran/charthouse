@@ -1,13 +1,13 @@
 # Development
 
-Local development and verification for **helm-playground** — a real-time Helm
+Local development and verification for **charthouse** — a real-time Helm
 template rendering UI (Vite + React frontend, Go API). This is the
 **Verification subsystem** detail: how to get the app running and how to prove a
 change is green before you commit.
 
 Routing: [CLAUDE.md](../CLAUDE.md) (agent operating loop) · [README.md](../README.md)
 (human overview) · [API.md](./API.md) (endpoint contracts) ·
-[DEPLOYMENT.md](./DEPLOYMENT.md) (Vercel + Supabase).
+[DEPLOYMENT.md](./DEPLOYMENT.md) (Docker, single binary, Vercel).
 
 ---
 
@@ -20,9 +20,9 @@ Routing: [CLAUDE.md](../CLAUDE.md) (agent operating loop) · [README.md](../READ
 | Go | **1.26+** | `go.mod` declares `go 1.26.0`. (Verified locally: go1.26.3.) Render uses `errors.AsType` (a new generic errors API), so an older toolchain will fail to build. |
 | helm CLI | optional, validated against **v4.2.0** | **Not required to run the app.** `/api/render` renders **in-process via the Helm Go SDK** (`helm.sh/helm/v4 v4.2.0`) — it does *not* shell out to a `helm` binary, and `HELM_BIN` is unused dead config. Install `helm` only if you want to cross-check rendering by hand with `helm template`. The project was validated against helm v4.2.0. |
 
-There are **no tests** and **no working linter** in this repo (see
-[Verification](#verification--is-it-green)). The green bar is `typecheck` +
-`build` + a render smoke test.
+Tests run via **Vitest** (`pnpm test`); the linter is **not** wired (eslint is
+not installed). The green bar is `typecheck` + `test` + `build` + a render smoke
+test (see [Verification](#verification--is-it-green)).
 
 ---
 
@@ -74,6 +74,21 @@ pnpm dev:vite      # frontend only (port 5173)
 pnpm dev:api       # backend only (port 5174)
 ```
 
+### Production server / single binary
+
+`cmd/server` is the self-contained binary used for self-hosting and Docker: it
+serves the three `/api/*` routes **and** the built SPA (embedded via `go:embed`)
+from one port (`PORT`, default **8080**). Build the UI first — the server embeds
+`dist/`:
+
+```bash
+pnpm build         # produce dist/ first
+pnpm serve         # go run ./cmd/server  -> http://localhost:8080
+```
+
+Or run the whole thing in Docker: `docker compose up --build` (also port 8080).
+See [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ---
 
 ## Environment
@@ -84,15 +99,19 @@ them — but none are required for local development.
 
 | Var | Required? | Purpose |
 |-----|-----------|---------|
-| `SUPABASE_URL` | optional | Supabase project URL. `/api/share` builds `<SUPABASE_URL>/rest/v1/helm_playground_shares` against PostgREST. If unset, sharing uses the hash fallback. |
-| `SUPABASE_SERVICE_ROLE_KEY` | optional | Service-role key used as both `apikey` and `Authorization: Bearer` for all share reads/writes (bypasses RLS). **Server-only secret — never expose to the client.** Pairs with `SUPABASE_URL`. |
-| `HELM_BIN` | unused | Documented in `.env.example` for historical reasons but referenced nowhere in the code (render uses the Helm Go SDK). Leave blank. |
-| `API_PORT` | optional, dev-only | Overrides the Go dev server port (default `5174`). Used only by `cmd/dev/main.go`; not in `.env.example`. |
+| `PORT` | optional | HTTP port for the self-hosted server (`cmd/server`). Default `8080`. Not used by the dev server. |
+| `SHARE_STORE` | optional | Share-link backend: `memory` (default, ephemeral, zero-config), `file`, or `supabase`. |
+| `SHARE_DIR` | optional | Directory for the `file` store (only when `SHARE_STORE=file`). Default `./data/shares`. |
+| `SUPABASE_URL` | only for supabase | Supabase project URL. The supabase store talks to `<SUPABASE_URL>/rest/v1/charthouse_shares` via PostgREST. |
+| `SUPABASE_SERVICE_ROLE_KEY` | only for supabase | Service-role key (`apikey` + `Authorization: Bearer`, bypasses RLS). **Server-only secret — never expose to the client.** |
+| `API_PORT` | optional, dev-only | Overrides the Go **dev** server port (default `5174`). Used only by `cmd/dev/main.go`; not in `.env.example`. |
 
-**Hash fallback works with zero config.** When either Supabase var is missing,
-`/api/share` returns HTTP `503` and the Share button automatically falls back to
-a self-contained `#h=<deflated-base64>` URL that encodes the whole chart. So you
-can develop, render, and share links without any backend or secrets.
+**Sharing works with zero config.** The default `memory` store means short
+`/s/<id>` links work locally with no backend or secrets (they are just lost on
+restart). `/api/share` returns HTTP `503` only when an explicitly configured
+store fails to initialize (e.g. `SHARE_STORE=supabase` without its credentials),
+and the Share button then falls back to a self-contained `#h=<deflated-base64>`
+URL that encodes the whole chart.
 
 > Heads-up: `.env` is gitignored. If you place a real `SUPABASE_SERVICE_ROLE_KEY`
 > there, keep it out of any shared location and rotate it if it ever leaks.
@@ -112,15 +131,25 @@ before committing.
 pnpm typecheck      # tsc -b --noEmit
 ```
 
-### 2. Build
+### 2. Test
+
+```bash
+pnpm test           # vitest run
+```
+
+Covers the pure topology inference engine (`src/lib/topology`). Add specs
+alongside new pure logic.
+
+### 3. Build
 
 ```bash
 pnpm build          # tsc -b && vite build  -> dist/
 ```
 
-You can preview the production build with `pnpm preview` (`vite preview`).
+You can preview the production build with `pnpm preview` (`vite preview`). For
+the backend, `go build ./... && go vet ./...` must also pass.
 
-### 3. Manual render smoke test
+### 4. Manual render smoke test
 
 With `pnpm dev` running, POST a tiny chart to `/api/render` **through the Vite
 proxy** (port 5173). `/api/render` accepts only POST; the body is JSON matching
@@ -160,10 +189,10 @@ pnpm lint           # eslint . --ext ts,tsx --report-unused-disable-directives -
 
 The `lint` script exists in `package.json`, **but eslint is not installed**
 (it is not in `devDependencies`), so the command fails. This is known debt — do
-**not** add `pnpm lint` to CI or your verification path. Use typecheck + build +
-render smoke instead.
+**not** add `pnpm lint` to CI or your verification path. Use typecheck + test +
+build + render smoke instead.
 
-There is also **no test runner** (`pnpm test` does not exist).
+(Tests, by contrast, *are* wired — run `pnpm test`, see [Test](#2-test) above.)
 
 ---
 
@@ -173,19 +202,23 @@ There is also **no test runner** (`pnpm test` does not exist).
 |------|-----------------|
 | `src/` | Vite + React + TypeScript frontend (the SPA). |
 | `src/App.tsx`, `src/main.tsx` | App root, layout, StrictMode mount. |
-| `src/components/` | UI: `layout/`, `editor/`, `values/`, `output/`, `share/`, `theme/`, `ui/`, `upload/`. |
-| `src/store/` | Zustand stores: `chart-store` (persisted), `render-store`, `theme-store`, `border-store`. |
+| `src/components/` | UI: `layout/`, `editor/` (incl. `SingleTemplatePanel` for single-file mode), `values/`, `output/`, `share/`, `theme/`, `topology/`, `ui/`, `upload/`. |
+| `src/store/` | Zustand stores: `chart-store` (persisted; holds files **and** chart/single mode state), `render-store`, `theme-store`, `border-store`. |
 | `src/lib/` | API clients + logic: `helm-client`, `share-client`, `import-client`, `chart-archive`, `schema-validate`, `use-debounced-render`, `sample-chart`. |
+| `src/lib/topology/` | Pure-TS topology engine: `buildTopology(stdout)` → graph of K8s resources + inferred relationships (with `infer.test.ts`). |
 | `src/types/chart.ts` | Shared types + constants (`ChartFiles`, `RenderRequest`, `SharePayload`, file-name constants). |
 | `src/styles/` | `globals.css` (Tailwind + component classes), `gruvbox.css` (palette). |
 | `api/render/index.go` | `POST /api/render` — Helm Go SDK in-process render (dry-run). |
-| `api/share/index.go` | `GET`/`POST /api/share` — Supabase PostgREST short URLs. |
+| `api/share/index.go` | `GET`/`POST /api/share` — short URLs via the pluggable share store. |
+| `api/share/store/` | Share `Store` interface + backends: `memory` (default), `file`, `supabase`. Selected by `SHARE_STORE`. |
 | `api/import/index.go`, `api/import/repo.go` | `POST /api/import` — fetch + extract a chart from a URL (SSRF-guarded). |
-| `cmd/dev/main.go` | Local Go dev server (port `API_PORT`, default 5174) that muxes the three `api/*` handlers. In prod they deploy as Vercel-style Go functions. |
-| `go.mod` | Module `helm-playground`, `go 1.26.0`, `helm.sh/helm/v4 v4.2.0`. |
+| `cmd/dev/main.go` | Local Go dev server (port `API_PORT`, default 5174) that muxes the three `api/*` handlers. |
+| `cmd/server/main.go` | Self-hosted production server (port `PORT`, default 8080): the three `api/*` handlers **plus** the embedded SPA, with `/s/:id` SPA fallback. |
+| `embed.go` | Repo-root package that `//go:embed all:dist` (must sit next to `dist/`); consumed by `cmd/server`. |
+| `go.mod` | Module `charthouse`, `go 1.26.0`, `helm.sh/helm/v4 v4.2.0`. |
 | `vite.config.ts` | Frontend dev server (5173) + `/api` → `:5174` proxy + `@` → `src` alias. |
 | `vercel.json` | Prod rewrites (`/s/:id` → `/`) and per-function runtime config. |
-| `supabase/migrations/` | Schema for `helm_playground_shares` (RLS enabled). |
+| `supabase/migrations/` | Schema for `charthouse_shares` (RLS enabled). |
 | `.env.example` | Documented optional env vars. |
 
 ---

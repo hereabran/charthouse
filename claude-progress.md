@@ -1,6 +1,6 @@
 # claude-progress.md
 
-This is the **state log** for the helm-playground harness. It records where the
+This is the **state log** for the charthouse harness. It records where the
 project actually is, what has been verified, and what to pick up next — so any
 session (human or agent) can resume without re-deriving the state of the world.
 
@@ -29,25 +29,98 @@ this file always reflects the latest known-good state.
 
 ## Current status
 
-The app is **built and working end to end** as a real-time Helm template
-rendering UI.
+**Charthouse** — a "Helm chart playground" — is **built and working end to end**
+as a real-time Helm template rendering UI. (The name is nautical; "Helm" is a
+trademark of the CNCF/Linux Foundation and is used nominatively only.) The
+project was rebranded this cycle from `helm-playground` to `charthouse` and is
+**MIT-licensed** (`LICENSE`: "Copyright (c) 2026 the Charthouse authors"). The Go
+module is `charthouse` (`go.mod`), the npm package is `charthouse`
+(`package.json`), and the toolbar wordmark is "⎈ Charthouse".
 
 - **Backend (Go):** three stateless HTTP handlers under `api/` — `render`,
-  `share`, `import` — plus a local dev server `cmd/dev/main.go` that muxes them
-  on port `5174`. Rendering uses the **Helm v4 Go SDK in-process**
+  `share`, `import`. Rendering uses the **Helm v4 Go SDK in-process**
   (`helm.sh/helm/v4 v4.2.0`, `action.NewInstall` with
   `DryRunStrategy=DryRunClient` and the `"memory"` storage driver) — there is no
-  `helm` CLI exec. Module `helm-playground`, `go 1.26.0`.
-- **Frontend (React/Vite/pnpm):** Vite 6 + React 19 + TypeScript 5.7 SPA. Vite
-  dev server on `5173` proxies `/api` to `http://localhost:5174`. The Go server
-  does not serve or proxy the frontend.
-- **3-column UI:** TemplatePanel (chart file tree + Monaco editor) | ValuesPanel
-  (`values.yaml` / `values.override.yaml` + Ajv schema validation) |
+  `helm` CLI exec. The render response includes `helmVersion` reported as
+  e.g. `"v4.2.0 sdk"`. Module `charthouse`, `go 1.26.0`. Render limits: 5 MiB
+  request body, 500 files, 256 KiB/file, 4 MiB total, 10s timeout.
+- **Two servers:**
+  - `cmd/dev/main.go` — dev-only, muxes the three handlers on port `5174`.
+    Unchanged.
+  - `cmd/server/main.go` — the **production single self-contained binary**. It
+    serves `/api/render`, `/api/share`, `/api/import` **and** the built SPA,
+    embedded at compile time via `//go:embed all:dist`. The embed lives in the
+    repo-root package (`embed.go`, `package charthouse`) because `go:embed`
+    cannot reference parent dirs. SPA fallback: unknown non-asset paths return
+    `index.html` (so client routes like `/s/<id>` work); unmatched `/api/*`
+    return JSON 404; `/assets/*` get a long immutable cache; HTML is no-cache.
+    Binds `PORT` (default `8080`). Build order matters: `pnpm build` must run
+    before `go build ./cmd/server` (the Dockerfile enforces this). `dist/` must
+    exist for the embed to compile — `dist/.gitkeep` is committed and
+    `.gitignore` un-ignores it (`!dist/.gitkeep`).
+- **Frontend (React/Vite/pnpm):** Vite 6 + React 19 + TypeScript 5.7 SPA. In
+  dev, Vite serves `:5173` and proxies `/api` to `http://localhost:5174`. In
+  production, the embedded SPA is served by `cmd/server` on `:8080`.
+- **Two editing modes (Chart | Single file):** the toolbar has a segmented
+  toggle (`src/components/layout/Toolbar.tsx`); `chart-store`
+  (`src/store/chart-store.ts`) tracks `mode` plus `singleTemplate` (the scratch
+  template), persisted in `localStorage` key `hp:chart`. **Values
+  (`values.yaml` / `values.override.yaml`) are shared across both modes via
+  `files`** — single mode owns only its template, so switching modes never
+  overwrites or loses values (`ValuesPanel` is mode-agnostic). `buildRenderFiles`
+  wraps **single** mode into a synthesized minimal chart (`Chart.yaml` +
+  `templates/template.yaml` = `singleTemplate` + the shared `values.yaml`/override
+  from `files`); **chart** mode passes files through unchanged. The left column
+  swaps TemplatePanel (chart) vs `SingleTemplatePanel` (single). Share round-trips
+  the mode (`SharePayload` gained optional `mode` + `single{template}`; values
+  travel in `files`; legacy shares with no `mode` load as chart).
+- **3-column UI:** Template (chart file tree + Monaco, or single-template editor)
+  | Values (`values.yaml` / `values.override.yaml` + Ajv schema validation) |
   RenderedOutput (read-only Monaco showing rendered manifests). Edits are
   debounced 300ms and POSTed to `/api/render`.
-- **Gruvbox theme:** light/dark toggle, 7 accent colors, sharp/rounded corner
+- **Resource topology viewer:** a pure-TS engine under `src/lib/topology/`
+  (`types`, `parse`, `infer`, `index`). `buildTopology(stdout, defaultNamespace)`
+  parses the rendered multi-doc YAML (js-yaml) and infers relationships from the
+  manifests **with no cluster** — Service→workload (selector), Ingress→Service /
+  Ingress→Secret (tls), workload→ConfigMap/Secret/ServiceAccount/PVC, HPA→workload,
+  PDB/NetworkPolicy→workload, RoleBinding/ClusterRoleBinding→ServiceAccount+Role,
+  and `ownerReferences`. Dangling refs become faded "external" nodes; output is
+  deterministic. The UI (`src/components/topology/`: TopologyModal, TopologyGraph,
+  ResourceNode, ResourcePanel + `layout.ts` dagre top-down + `groupTheme.ts`)
+  uses React Flow (`@xyflow/react` v12) + dagre, opens as a full-window overlay
+  from a "topology" button in the RenderedOutput header (disabled at 0 docs),
+  and shows a clicked node's rendered YAML in a read-only Monaco side panel. The
+  modal is `lazy()`-loaded behind `Suspense` so React Flow/dagre stay in a
+  separate chunk.
+- **Pluggable share store (vendor-neutral):** `api/share/store/`
+  (`store.go`, `memory.go`, `file.go`, `supabase.go`). `store.New()` reads
+  `SHARE_STORE` = `memory` | `file` | `supabase` (**default `memory`**).
+  `memory` = in-process (ephemeral, links lost on restart); `file` = atomic JSON
+  files under `SHARE_DIR` (default `./data/shares`), durable; `supabase` =
+  PostgREST table `charthouse_shares` via the service-role key. Shared
+  constants: 8-char ids over `23456789abcdefghjkmnpqrstuvwxyz`, `IDPattern`
+  `^[a-z0-9]{6,16}$`, `MaxPayloadBytes` 256 KiB. `api/share/index.go` uses the
+  store via `sync.Once`: `GET ?id` → 200 `{id,payload}` / 404 / 502;
+  `POST {payload}` → 200 `{id}`. It returns **503 only on explicit
+  misconfiguration** (e.g. `SHARE_STORE=supabase` with missing
+  `SUPABASE_URL`/key, or an unknown `SHARE_STORE`). With the default memory
+  store, short links work out of the box; the SPA's `#h=` hash fallback
+  (`src/lib/share-client.ts`) now only triggers on that rare 503.
+- **Docker / self-host (primary path):** multi-stage `Dockerfile`
+  (`node:22-alpine` + `pnpm build` → `golang:1.26-alpine` `CGO_ENABLED=0` build
+  embedding `dist` → `gcr.io/distroless/static-debian12:nonroot`, `EXPOSE 8080`,
+  `ENV PORT=8080 SHARE_STORE=memory SHARE_DIR=/data/shares`, runs as nonroot).
+  `.dockerignore` present. `docker-compose.yaml`: one service `charthouse`,
+  `build .`, ports `8080:8080`, `SHARE_STORE=file` + `SHARE_DIR=/data/shares` +
+  named volume `charthouse-data:/data` for durable links (commented Supabase
+  passthrough).
+- **Vercel/Supabase still work, but are now OPTIONAL:** `vercel.json` unchanged
+  (rewrites `/s/:id` → `/`, declares the three Go functions); `api/*/index.go`
+  `Handler` exports unchanged; Supabase is just `SHARE_STORE=supabase` + the
+  migration under `supabase/migrations/` (table `charthouse_shares`).
+- **Gruvbox theme:** light/dark toggle, accent colors, sharp/rounded corner
   toggle, all persisted in `localStorage`.
-- **Upload + import + share — all implemented:**
+- **Upload + import + share:**
   - **Upload / drag-drop:** parses `.zip` (JSZip), `.tgz` / `.tar.gz`
     (pako + hand-written tar parser), or a folder, client-side; top-level chart
     dir auto-stripped.
@@ -55,44 +128,56 @@ rendering UI.
     (direct `.tgz`/`.tar.gz`/`.zip`, a Helm repo base URL via `index.yaml`, or a
     repo+chart URL), with SSRF protection, size caps, and a 5-hop redirect cap
     that re-validates each redirect target (scheme + private/loopback IP block).
-  - **Share:** prefers a Supabase-backed short URL (`/api/share` → `/s/:id`);
-    falls back to a self-contained `#h=<deflated-base64>` hash URL when Supabase
-    is not configured.
-
-**Recent fix landed:** the pnpm build-script approval issue was resolved in
-[pnpm-workspace.yaml](./pnpm-workspace.yaml) via `allowBuilds: { esbuild: true }`,
-so `pnpm install` no longer trips `ERR_PNPM_IGNORED_BUILDS` on esbuild's
-postinstall under pnpm 11.
+  - **Share:** prefers a store-backed short URL (`/api/share` → `/s/:id`); falls
+    back to a self-contained `#h=<deflated-base64>` hash URL only on a 503.
+- **Docs:** a public `README.md` (titled "Charthouse") plus a synced `docs/`
+  set — `API.md`, `ARCHITECTURE.md`, `DEPLOYMENT.md`, `DEVELOPMENT.md`.
+- **Tests:** `src/lib/topology/infer.test.ts` (Vitest, 10 passing). Script
+  `pnpm test` runs `vitest run`.
 
 > Note: `.env` on disk holds a real-looking Supabase service-role secret. It is
 > gitignored (not committed), but rotate it if it ever lands somewhere shared.
+> `HELM_BIN` has been removed from `.env.example` (the SDK is used; no CLI).
 
 ---
 
 ## Known-good baseline
 
 These are the commands that establish "the world still works." Run them from the
-repo root. (Tooling: pnpm 11.5.1 pinned via `packageManager`; node 22.13+
-advisory — there is no `engines` field; go 1.26+ per `go.mod`.)
+repo root. (Tooling: pnpm `11.5.1` pinned via `packageManager`; node 22+; go
+1.26+ per `go.mod`. The Helm CLI is **not** required — render uses the SDK.)
 
 | Command | What it proves |
 | --- | --- |
 | `pnpm install` | JS deps install; esbuild postinstall approved via pnpm-workspace.yaml |
-| `pnpm dev` | Runs **both** services (via `concurrently`): Vite on `:5173` + Go dev API on `:5174` (proxied at `/api/*`) |
+| `pnpm dev` | Runs **both** dev services (via `concurrently`): Vite on `:5173` + Go dev API on `:5174` (proxied at `/api/*`) |
 | `pnpm typecheck` (`tsc -b --noEmit`) | Frontend type-checks clean |
-| `pnpm build` (`tsc -b && vite build`) | Production build into `dist/` succeeds |
+| `pnpm test` (`vitest run`) | Topology inference unit tests pass (10/10) |
+| `pnpm build` (`tsc -b && vite build`) | Production build into `dist/` succeeds (topology lazy-split into its own chunk) |
+| `pnpm serve` (`go run ./cmd/server`) | Production single binary serves the embedded SPA + API on `:8080` |
+| `go build ./...` / `go vet ./...` | Go compiles and vets clean |
 
-**Render round-trip (the core contract):** with the dev API up, a `POST` to
-`http://localhost:5174/api/render` with a tiny chart (`Chart.yaml`,
-`values.yaml`, `templates/cm.yaml`) returns `{ "ok": true, "stdout": "...", ... }`
-rendered via **Helm v4.2.0** (the response includes `helmVersion`). See the
-README "Smoke test" for the exact `curl`.
+**Render round-trip (the core contract):** a `POST` to `/api/render` with a tiny
+chart returns `{ "ok": true, "stdout": "...", ... }` rendered via **Helm
+v4.2.0** (the response includes `helmVersion` = `"v4.2.0 sdk"`). Against the dev
+API this is `http://localhost:5174/api/render`; against the production server it
+is `http://localhost:8080/api/render`. See the README "Smoke test" for the exact
+`curl`.
+
+**Share round-trip:** with `SHARE_STORE=memory` (default) or `file`, `POST
+/api/share` returns `{id}` and `GET /api/share?id=…` returns the payload. The
+file store survives a server restart; memory does not.
 
 **Do NOT** put `pnpm lint` in the verification path. The `lint` script invokes
-`eslint`, but eslint is not in `devDependencies` — it would fail. This is known
-debt, tracked, and deliberately excluded from CI/verification.
+`eslint`, but eslint is **not** in `devDependencies` — `pnpm lint` currently
+fails. This is known debt; do not present it as runnable.
 
-After a session, confirm nothing is left listening: `lsof -i :5173 -i :5174`.
+**Docker note:** `docker build` / `docker compose up` are written but have **not
+been run on the dev machine** (docker is not installed here). Treat the
+Dockerfile/compose as implemented-but-unbuilt until someone with Docker verifies.
+
+After a dev session, confirm nothing is left listening: `lsof -i :5173 -i :5174`
+(and `:8080` if `pnpm serve` was used).
 
 ---
 
@@ -103,38 +188,96 @@ the honest verification gaps in
 [clean-state-checklist.md](./clean-state-checklist.md). Pick **one** at a time
 and define done before starting.
 
-**Verification gaps (implemented but not verified locally this session):**
+**Verification gaps (implemented but not verified this way):**
 
-- **Editor / file tree / values / output / upload / theme / persistence** —
-  implemented; exercise and confirm in a real browser session, then mark
-  verified.
-- **`share-001` (short URL)** — needs Supabase configured (`SUPABASE_URL` +
-  `SUPABASE_SERVICE_ROLE_KEY`) to verify the `/s/:id` round-trip end to end.
-- **`share-002` (hash fallback)** — verified by inspection only; no automated
-  test for `encodePayloadToHash` / `decodePayloadFromHash` yet.
+- **Docker image** — `docker build` and `docker compose up` were never run here
+  (no docker on the dev machine). Build the image, hit `:8080`, and confirm the
+  `file` store volume gives durable links.
+- **Editor / file tree / values / output / upload / theme / persistence** and
+  the **two-mode toggle** and **topology overlay** — exercise and confirm in a
+  real browser session, then mark verified.
+- **Supabase share backend (`SHARE_STORE=supabase`)** — exercised only by
+  inspection; needs a real `SUPABASE_URL` + service-role key + the
+  `charthouse_shares` migration to verify the `/s/:id` round-trip.
 
 **Feature / robustness candidates:**
 
-- **Share id collision-retry** — `/api/share` POST generates one 8-char id and
-  inserts; on a primary-key collision it does not retry. Add a retry loop.
-- **Share expiry / GC** — `helm_playground_shares` rows have no expiry and no
-  cleanup; add a TTL column + GC (new Supabase migration; never edit an applied
-  one in place).
-- **Copy-link toast** — ShareButton auto-copies the URL but only shows it in a
-  Modal; add a transient "copied" toast for clearer feedback.
-- **Document `/api/import`** — the import-from-URL feature exists in code and is
-  wired in dev + `vercel.json`, but is not yet in the README Architecture /
-  Project-layout sections.
-
-**Lower priority / known debt:**
-
-- Restore a working `pnpm lint` (add eslint + config) or remove the script.
-- Stale config: `HELM_BIN` (`.env.example`) is unreferenced (SDK is used);
-  `tsconfig` references a non-existent `server/` dir. Harmless but worth pruning.
+- **README screenshots** — the README is public but has no screenshots/GIFs of
+  the UI, the two modes, or the topology viewer. Add some.
+- **Restore a working `pnpm lint`** — add `eslint` + a flat config to
+  `devDependencies` (or remove the dead `lint` script).
+- **Share id collision-retry** — `/api/share` POST generates one id and inserts;
+  on a collision it does not retry. Add a small retry loop (matters most for the
+  `file` and `supabase` stores).
+- **Share expiry / GC** — share entries (file + `charthouse_shares`) have no
+  expiry and no cleanup; add a TTL + GC (for Supabase, a new migration — never
+  edit an applied one in place).
+- **Copy-link toast** — ShareButton auto-copies the URL but surfaces it in a
+  Modal; a transient "copied" toast would be clearer.
 
 ---
 
 ## Session log
+
+### 2026-06-09 — Charthouse: rebrand, two modes, topology viewer, single-binary server + pluggable shares + Docker
+
+- **Changed:**
+  - **Rebrand → Charthouse (MIT).** Renamed the project end to end: `go.mod`
+    module `charthouse`, `package.json` name `charthouse`, `index.html` title and
+    toolbar wordmark ("⎈ Charthouse"), and a new MIT `LICENSE`
+    ("Copyright (c) 2026 the Charthouse authors").
+  - **Two editing modes.** Added a "Chart | Single file" toggle
+    (`Toolbar.tsx`); extended `chart-store.ts` with `mode` + single-file state
+    and `buildRenderFiles()` that synthesizes a minimal chart for single mode;
+    added `SingleTemplatePanel.tsx`; made ValuesPanel mode-aware; extended
+    `SharePayload` (`types/chart.ts`) to round-trip the mode (legacy shares load
+    as chart).
+  - **Resource topology viewer.** New pure-TS engine `src/lib/topology/`
+    (`types`/`parse`/`infer`/`index`) + UI `src/components/topology/`
+    (TopologyModal/TopologyGraph/ResourceNode/ResourcePanel + `layout.ts` dagre +
+    `groupTheme.ts`), using React Flow + dagre, triggered from RenderedOutput and
+    lazy-loaded behind Suspense. Added `infer.test.ts`.
+  - **Vendor-neutral backend.** Refactored `/api/share` onto a pluggable store
+    (`api/share/store/{store,memory,file,supabase}.go`) selected by `SHARE_STORE`
+    (default `memory`); `api/share/index.go` now uses it via `sync.Once` and only
+    503s on explicit misconfiguration.
+  - **Single self-contained server + embed.** Added `cmd/server/main.go` (serves
+    API + embedded SPA on `PORT`/8080, SPA fallback for `/s/:id`) and `embed.go`
+    at the repo root (`//go:embed all:dist`); committed `dist/.gitkeep` and the
+    `.gitignore` un-ignore so the embed compiles. `cmd/dev/main.go` unchanged.
+  - **Docker.** Added a multi-stage `Dockerfile` (node build → go embed build →
+    distroless nonroot), `.dockerignore`, and `docker-compose.yaml` (file store +
+    named volume for durable links). Vercel/Supabase paths kept working as
+    optional.
+  - **Config / scripts / docs.** Removed dead `HELM_BIN` from `.env.example` and
+    documented `PORT` / `SHARE_STORE` / `SHARE_DIR` / `SUPABASE_*`; added
+    `serve` (`go run ./cmd/server`) and `test` (`vitest run`) scripts; published
+    a public README and synced `docs/` (API/ARCHITECTURE/DEPLOYMENT/DEVELOPMENT).
+- **Verified (commands run this session, all passed):**
+  - `pnpm typecheck` → 0 errors.
+  - `pnpm test` → 10/10 passing (topology inference).
+  - `pnpm build` → OK; the topology code split into its own lazy chunk.
+  - `go build ./...` and `go vet ./...` → OK.
+  - `cmd/server` smoke → embedded SPA served at `/`; unknown route `/s/:id`
+    falls back to `index.html`; unmatched `/api/*` returns JSON 404; render
+    works (`helmVersion` `"v4.2.0 sdk"`); share round-trip works on the
+    **memory** store **and** on the **file** store, where links survived a
+    server restart.
+- **Not verified this session:** **Docker** — `docker build` /
+  `docker compose up` were not run (docker is not installed on the dev machine).
+  The Dockerfile and compose file are written but **unbuilt** here. The
+  **Supabase** share backend was only inspected, not exercised against a real
+  project.
+- **Left / next:** Build and run the Docker image; browser-verify the UI
+  (two-mode toggle, topology overlay, editor/values/upload/theme/persistence);
+  verify the Supabase share backend with real credentials; add README
+  screenshots; restore a working `pnpm lint`. See [Open / next](#open--next).
+- **Handoff:** Default share backend is `memory` (zero-config, ephemeral); use
+  `SHARE_STORE=file` (with `SHARE_DIR`) or compose for durable links. The
+  production server is `cmd/server` on `:8080`; the dev server is `cmd/dev` on
+  `:5174` (Vite `:5173` proxies `/api`). `pnpm build` MUST precede
+  `go build ./cmd/server` (the embed needs a populated `dist/`). `pnpm lint`
+  still fails (eslint missing) — keep it out of the verify path.
 
 ### 2026-06-09 — Harness bootstrap + pnpm build fix
 
@@ -158,3 +301,20 @@ and define done before starting.
   unconfigured by default in local dev, so nothing is written to Supabase. The
   `/api/import` feature is real but undocumented in the README — fold it in when
   docs are refreshed.
+
+### 2026-06-09 — Fix: single-mode clobbered chart values.yaml
+
+- **Bug:** Switching Chart → Single overwrote `values.yaml`, and switching back
+  did not restore it (same after import). Root cause: `ValuesPanel` stayed
+  mounted across mode switches and drove one Monaco model (`path="values.yaml"`)
+  from two different buffers (chart `files['values.yaml']` vs a separate
+  `singleValues`), desyncing the controlled value so a later keystroke wrote the
+  wrong buffer into `files`.
+- **Fix:** Values are now **shared** across modes. Removed `singleValues` /
+  `singleOverride` from `chart-store`; single mode keeps only `singleTemplate`.
+  `ValuesPanel` reverted to mode-agnostic (always edits `files`).
+  `buildRenderFiles` single mode reuses `files['values.yaml']` / override.
+  `SharePayload.single` is now `{ template }` (values travel in `files`); old
+  shares still load. Updated ARCHITECTURE/feature_list/this log to match.
+- **Verified:** `pnpm typecheck` 0, `pnpm test` 10/10, `pnpm build` OK. Backwards
+  compatible with persisted `hp:chart` and prior single-mode share links.

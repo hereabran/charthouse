@@ -1,50 +1,142 @@
-# Deployment — Vercel + Supabase
+# Deployment
 
-How to deploy helm-playground to Vercel, with optional Supabase-backed short-share URLs.
+How to self-host Charthouse, a playground for Helm charts. Charthouse ships as a single
+self-contained Go binary that serves both the API and the built UI, so self-hosting is the
+primary, zero-dependency path. A managed Vercel + Supabase setup is available as an optional
+alternative.
 
-> Sharing is **optional**. With Supabase unset, the app still deploys and works — the Share button
-> falls back to self-contained hash URLs (no backend). See [Degraded mode](#degraded-mode-no-supabase).
+> **Sharing works out of the box.** The Share button is backed by a pluggable store selected
+> with the `SHARE_STORE` env var (`memory` by default). No external service is required — see
+> [Storage durability](#storage-durability).
 
-Related docs: [project map](../CLAUDE.md) · [README](../README.md) · [architecture](ARCHITECTURE.md) · [API reference](API.md)
+Related docs: [project map](../CLAUDE.md) · [README](../README.md) · [architecture](ARCHITECTURE.md) · [API reference](API.md) · [development](DEVELOPMENT.md)
 
 ---
 
-## Architecture on Vercel
+## What you get in one binary
 
-helm-playground deploys as two things on one Vercel project:
+The production server (`cmd/server/main.go`) is a single, self-contained binary. It serves:
 
-1. **Static frontend** — the Vite build output (`dist/`), served as static assets / an SPA.
-2. **Go serverless functions** under `api/` — one function per handler:
-   - `api/render/index.go` → `POST /api/render` (Helm v4 Go SDK, in-process render)
-   - `api/share/index.go` → `GET`/`POST /api/share` (Supabase-backed short URLs)
-   - `api/import/index.go` → `POST /api/import` (fetch + extract a chart archive from a URL)
+- `POST /api/render` — in-process Helm render via the Helm v4 Go SDK (no Helm CLI required).
+- `GET`/`POST /api/share` — short-share links, backed by the configured store.
+- `POST /api/import` — fetch and extract a chart archive from a URL.
+- the built single-page app (`dist/`), **embedded at compile time** via `//go:embed all:dist`.
 
-Each `index.go` exports a `Handler` function in the Vercel Go-function style. Vercel auto-detects them
-from the `api/` directory and builds them using the root `go.mod` (module `helm-playground`, `go 1.26.0`,
-`helm.sh/helm/v4 v4.2.0`). **No Helm CLI binary is required** — rendering runs through the Helm Go SDK.
+Unknown non-asset paths fall back to `index.html`, so client routes such as `/s/<id>` resolve in
+the SPA; unmatched `/api/*` paths return a JSON `404`. Assets under `/assets/*` get a long
+`immutable` cache; HTML is served `no-cache`. The server binds `PORT` (default `8080`).
 
-> The local dev server `cmd/dev/main.go` (port `5174`) is for development only. It muxes the same three
-> handlers behind one process; in production each handler is its own serverless function. It is **not**
-> deployed.
+You do not need the Helm CLI: rendering runs through the Helm Go SDK in-process.
 
-### The `/s/:id` rewrite
+---
 
-Short-share links look like `https://<your-app>/s/abc12345`. There is no `/s/...` page on disk — these
-URLs must reach the SPA so the frontend can read the `:id`, call `GET /api/share?id=<id>`, and load the
-shared chart. `vercel.json` rewrites the path to the SPA root:
+## Option A — Docker (recommended)
 
-```json
-{ "source": "/s/:id", "destination": "/" }
+The image is fully self-contained: the multi-stage `Dockerfile` builds the SPA with
+`node:22-alpine` + pnpm, compiles a static Go binary on `golang:1.26-alpine` (`CGO_ENABLED=0`)
+that embeds `dist/`, and ships the result on `gcr.io/distroless/static-debian12:nonroot`. The
+final image has no shell and runs as a non-root user. It `EXPOSE`s `8080`.
+
+### Compose (durable short links)
+
+```bash
+docker compose up --build
+# -> http://localhost:8080
 ```
 
-The browser keeps the `/s/:id` URL; only the served content is the SPA. On load, the frontend matches
-the path `^/s/([a-z0-9]{6,16})$`, fetches the payload, and then rewrites the URL to `/`.
+`docker-compose.yaml` defines one service, `charthouse`, mapping `8080:8080`. It sets
+`SHARE_STORE=file` with `SHARE_DIR=/data/shares` and mounts the named volume
+`charthouse-data` at `/data`, so short links are **durable across restarts and rebuilds**.
+
+To change the storage backend, edit the `environment:` block:
+
+- **Ephemeral links:** set `SHARE_STORE: "memory"` (no volume needed).
+- **Managed storage:** set `SHARE_STORE: "supabase"` and provide `SUPABASE_URL` +
+  `SUPABASE_SERVICE_ROLE_KEY` (the compose file ships these as commented examples). See
+  [Option C](#option-c--vercel--supabase-optionalmanaged) for the schema.
+
+### Plain image (`docker build`)
+
+```bash
+docker build -t charthouse .
+docker run -p 8080:8080 charthouse
+# -> http://localhost:8080
+```
+
+A plain `docker run` uses the image defaults baked into the `Dockerfile`: `PORT=8080`,
+`SHARE_STORE=memory`, `SHARE_DIR=/data/shares`. With the default memory store, links are
+ephemeral (lost on container restart). Override at run time, e.g.:
+
+```bash
+# Durable links: mount a volume and switch to the file store.
+docker run -p 8080:8080 \
+  -e SHARE_STORE=file -e SHARE_DIR=/data/shares \
+  -v charthouse-data:/data \
+  charthouse
+```
 
 ---
 
-## Build / output config
+## Option B — single binary
 
-The full `vercel.json` is small and authoritative — this is the entire file:
+Build the UI first (it is embedded into the binary), then build and run the server.
+
+```bash
+pnpm install
+pnpm build                       # tsc -b && vite build  -> dist/
+go build -o charthouse ./cmd/server
+./charthouse                     # -> http://localhost:8080
+```
+
+`pnpm build` **must** precede `go build`: the SPA is embedded at compile time via
+`//go:embed all:dist` (see [`embed.go`](../embed.go)). A committed `dist/.gitkeep` lets the Go
+code compile even when no build has run — but without a real `pnpm build` the server has nothing
+to serve and will report `frontend not built — run pnpm build` for UI routes. Run a real build
+to serve the UI.
+
+> A convenience script exists too: `pnpm serve` runs `go run ./cmd/server` (still requires a prior
+> `pnpm build` to embed real assets).
+
+Configure with environment variables (see [Configuration](#configuration)). For example:
+
+```bash
+PORT=9000 SHARE_STORE=file SHARE_DIR=/var/lib/charthouse/shares ./charthouse
+```
+
+---
+
+## Configuration
+
+Every value is optional; with no configuration at all Charthouse runs self-contained with
+in-memory shares. The names below are exactly those documented in [`.env.example`](../.env.example).
+
+| Variable                    | Default          | Secret?    | Meaning                                                                                                |
+| --------------------------- | ---------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| `PORT`                      | `8080`           | No         | HTTP port the self-hosted server (`cmd/server`) binds.                                                 |
+| `SHARE_STORE`               | `memory`         | No         | Share-link backend: `memory` \| `file` \| `supabase`.                                                  |
+| `SHARE_DIR`                 | `./data/shares`  | No         | Directory for the file store. Only used when `SHARE_STORE=file`.                                       |
+| `SUPABASE_URL`              | _(unset)_        | No         | Supabase project base URL. Required when `SHARE_STORE=supabase`; calls `<SUPABASE_URL>/rest/v1/charthouse_shares` via PostgREST. |
+| `SUPABASE_SERVICE_ROLE_KEY` | _(unset)_        | **Yes**    | Supabase service-role key, used as both `apikey` and `Authorization: Bearer`. Required when `SHARE_STORE=supabase`. Server-only — never expose to the client bundle. |
+
+Behavior notes:
+
+- An **unknown** `SHARE_STORE` value, or `SHARE_STORE=supabase` with `SUPABASE_URL` /
+  `SUPABASE_SERVICE_ROLE_KEY` missing, is a misconfiguration: `/api/share` returns `503`. The SPA
+  treats that `503` as a signal to fall back to self-contained hash URLs.
+- With the default memory store (or a correctly configured file/supabase store), short links work,
+  so `503` is otherwise not returned.
+
+---
+
+## Option C — Vercel + Supabase (optional / managed)
+
+If you prefer a managed, serverless deployment, Charthouse also runs on Vercel with Supabase as
+the share store. This path is entirely optional — the binary and Docker image above need none of it.
+
+### Vercel layout
+
+The repo ships [`vercel.json`](../vercel.json). It rewrites short-link paths to the SPA and
+declares the three Go serverless functions:
 
 ```json
 {
@@ -60,134 +152,61 @@ The full `vercel.json` is small and authoritative — this is the entire file:
 }
 ```
 
-What this does — and, importantly, what it leaves to Vercel auto-detection:
+The `/s/:id` rewrite sends short-link URLs to the SPA so the frontend can read the `:id`, call
+`GET /api/share?id=<id>`, and load the shared chart (the browser keeps the `/s/:id` URL). Vercel
+auto-detects the Vite build (`pnpm build` → `dist/`) and the Go functions under `api/`; each
+`api/*/index.go` exports a `Handler` in the Vercel Go-function style.
 
-- **No `buildCommand`** is set. Vercel auto-detects the Vite project and runs its build (the repo's
-  `pnpm build` = `tsc -b && vite build`). The `packageManager` pin (`pnpm@11.5.1`) in `package.json`
-  selects pnpm.
-- **No `outputDirectory`** is set. Vercel uses Vite's default output, `dist/`.
-- **No Go runtime version pin.** The Go version is inferred from the root `go.mod` (`go 1.26.0`).
-- **`functions`** sets per-function limits:
+### Supabase store
 
-  | Function                | `maxDuration` | `memory` |
-  | ----------------------- | ------------- | -------- |
-  | `api/render/index.go`   | 15s           | 1024 MB  |
-  | `api/share/index.go`    | 10s           | 256 MB   |
-  | `api/import/index.go`   | 15s           | 512 MB   |
+1. **Set env vars in Vercel** (Project Settings → Environment Variables):
+   `SHARE_STORE=supabase`, `SUPABASE_URL=https://<project>.supabase.co`,
+   `SUPABASE_SERVICE_ROLE_KEY=<service-role key>`.
+2. **Apply the migration.** The schema lives in [`supabase/migrations/`](../supabase/migrations/)
+   (`20260609000000_charthouse_shares.sql`). Apply it against your linked project:
 
-> Do not add a `buildCommand` or `outputDirectory` unless you are intentionally overriding
-> auto-detection — the current setup relies on it.
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase db push
+   ```
 
----
+   This creates table `public.charthouse_shares` (`id text primary key`, `payload jsonb not null`,
+   `created_at timestamptz not null default now()`), an index on `created_at`, and **enables Row
+   Level Security**. RLS is enabled with **zero policies** on purpose: `anon`/`authenticated` keys
+   cannot touch the table at all. The `/api/share` function authenticates with the **service-role
+   key**, which bypasses RLS, so it is the only thing that can read or write shares.
 
-## Supabase setup (optional — enables short URLs)
-
-Sharing is only short-URL-backed when **both** Supabase env vars are set on the deployment (see below).
-If you skip this section, the app still deploys; sharing degrades gracefully to hash URLs.
-
-### 1. Create a project
-
-Create a Supabase project. Note its project URL (e.g. `https://xxxxxxxx.supabase.co`) and its
-**service-role** key (Settings → API → `service_role` secret).
-
-### 2. Apply the migration
-
-The schema lives in `supabase/migrations/`. Apply it with the Supabase CLI against your linked project:
-
-```bash
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
-
-This applies the single migration file:
-
-- **`supabase/migrations/20260609000000_helm_playground_shares.sql`**
-
-which creates table **`public.helm_playground_shares`**:
-
-| Column       | Type          | Notes                          |
-| ------------ | ------------- | ------------------------------ |
-| `id`         | `text`        | primary key                    |
-| `payload`    | `jsonb`       | `not null`                     |
-| `created_at` | `timestamptz` | `not null default now()`       |
-
-It also creates an index `helm_playground_shares_created_at_idx` on `created_at`, and runs
-`alter table ... enable row level security`.
-
-> **Migration discipline:** if the shares table ever needs to change, create a new migration with
-> `supabase migration new <name>` and re-run `supabase db push`. Never edit a previously-applied
-> migration in place.
-
-### 3. RLS posture (read before deploying)
-
-Row Level Security is **enabled with zero policies** — this is intentional. With no policies, the
-`anon` and `authenticated` keys cannot read or write the table at all. The `/api/share` Go function
-authenticates with the **service-role key**, which bypasses RLS, so it is the only thing that can touch
-the table.
-
-Consequences:
-
-- The service-role key is what makes sharing work. It is a **server-only secret**.
-- Because the function uses the service-role key for both the `apikey` and `Authorization: Bearer`
-  headers, all share reads/writes run with full privileges. Keep this key out of the client at all costs
-  (see next section).
-- Share rows have no expiry/GC; old rows accumulate in `created_at` order until you prune them.
+> **Keep the service-role key server-only.** It bypasses RLS — leaking it grants full read/write
+> to your Supabase project. There are no `VITE_`-prefixed variables in this project; never add one
+> for the service-role key, and never let it reach the client bundle.
 
 ---
 
-## Environment variables (set in Vercel)
+## Storage durability
 
-Set these in your Vercel project (Project Settings → Environment Variables). The names below are exactly
-those documented in `.env.example`; do not rename them.
+| `SHARE_STORE` | Durability                                  | Use when                                            |
+| ------------- | ------------------------------------------- | --------------------------------------------------- |
+| `memory`      | **Ephemeral** — links die on restart        | Quick trials, demos, stateless instances            |
+| `file`        | **Durable** on a mounted volume (`SHARE_DIR`) | Single-node self-hosting (the Docker compose default) |
+| `supabase`    | **Managed** — Postgres via Supabase          | Serverless / multi-instance deployments             |
 
-| Variable                    | Required? | Secret?            | Purpose                                                                                     |
-| --------------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------------- |
-| `SUPABASE_URL`              | Optional  | Non-secret config  | Supabase project base URL; `/api/share` calls `<SUPABASE_URL>/rest/v1/helm_playground_shares` via PostgREST. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Optional  | **SECRET**         | Service-role key used by `/api/share` as both `apikey` and `Authorization: Bearer` (bypasses RLS). |
-| `HELM_BIN`                  | Optional  | (unused)           | Documented in `.env.example` only; **not referenced anywhere in code** — render uses the Helm Go SDK. Leave unset. |
-
-Notes and constraints:
-
-- **Both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be set together.** If either is missing,
-  `/api/share` returns HTTP `503` and the frontend transparently falls back to hash URLs.
-- **No `VITE_`-prefixed (client-exposed) variables exist in this project.** Anything prefixed `VITE_`
-  is bundled into the public client and is readable by anyone. Because there are no public vars, do not
-  create one — and in particular **never** add `VITE_SUPABASE_SERVICE_ROLE_KEY` or otherwise expose the
-  service-role key to the client bundle. The service-role key bypasses RLS; leaking it gives anyone full
-  read/write to your Supabase project.
-- `HELM_BIN` is stale config kept only in `.env.example`; setting it has no effect.
-- `API_PORT` is **dev-only** (consumed by `cmd/dev/main.go`); it is not used in the Vercel deployment.
-
----
-
-## Degraded mode (no Supabase)
-
-You do **not** need Supabase to deploy or to use sharing. When `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` are unset:
-
-- `POST /api/share` returns `503` (`sharing not configured: ...`).
-- The Share button catches that and instead builds a **self-contained hash URL** of the form
-  `https://<your-app>/#h=<deflated-base64>`, which encodes the whole chart (files + release + namespace)
-  in the fragment. It needs no backend; the app decodes it on load and strips the hash from history.
-
-So a Supabase-less deployment is fully functional — sharing just produces longer URLs (a few KB) instead
-of short `/s/:id` links. Add Supabase later to upgrade to short URLs without any code change.
-
-> `/api/render` and `/api/import` do **not** depend on Supabase and work regardless of these env vars.
+The `file` store writes one JSON file per share under `SHARE_DIR` with atomic rename-on-write;
+mount that directory on a persistent volume (compose uses the named volume `charthouse-data`) for
+durable links.
 
 ---
 
 ## Post-deploy smoke check
 
-After the deployment goes live (replace `<your-app>` with the deployed host):
+Replace `<host>` with your deployed origin (e.g. `http://localhost:8080`).
 
-1. **Frontend loads + renders.** Open `https://<your-app>/`. The sample chart should render
-   immediately in the right-hand output column.
+1. **UI loads.** Open `http://<host>/`. The sample chart should render in the output column. For a
+   managed deployment, a short-link route such as `http://<host>/s/<id>` should also serve the SPA.
 
-2. **Render API.** Confirm `POST /api/render` returns `{ "ok": true, ... }` for a minimal chart:
+2. **Render API.** Confirm `POST /api/render` returns `{ "ok": true, ... }`:
 
    ```bash
-   curl -sS -X POST https://<your-app>/api/render \
+   curl -sS -X POST http://<host>/api/render \
      -H 'content-type: application/json' \
      -d '{
        "files": {
@@ -200,35 +219,22 @@ After the deployment goes live (replace `<your-app>` with the deployed host):
      }'
    ```
 
-   Expect a `200` with `{ "ok": true, "stdout": "...ConfigMap...", "stderr": "", "durationMs": <n>, "helmVersion": "..." }`.
+   Expect a `200` with `{ "ok": true, "stdout": "...ConfigMap...", "stderr": "", "durationMs": <n>, "helmVersion": "v4.2.0 sdk" }`.
 
-3. **Share — short URL (only if Supabase is configured).** Click **Share** in the UI; you should get a
-   `https://<your-app>/s/<id>` link. Open it in a fresh tab and confirm the chart loads. Equivalent
-   API checks:
+3. **Share round-trip (optional).** Create a share, then read it back with the returned id:
 
    ```bash
-   # Create a share
-   curl -sS -X POST https://<your-app>/api/share \
+   curl -sS -X POST http://<host>/api/share \
      -H 'content-type: application/json' \
      -d '{"payload":{"files":{"Chart.yaml":"apiVersion: v2\nname: s\nversion: 0.1.0\n"},"releaseName":"demo","namespace":"default"}}'
    # -> {"id":"abc12345"}
 
-   # Read it back (use the id returned above)
-   curl -sS 'https://<your-app>/api/share?id=abc12345'
+   curl -sS 'http://<host>/api/share?id=abc12345'
    # -> {"id":"abc12345","payload":{...}}
    ```
 
-   If Supabase is **not** configured, `POST /api/share` returns `503` — that is expected, and the
-   Share button will produce a `#h=...` hash URL instead. Confirm that hash URL loads the chart.
+   With `SHARE_STORE=memory` this succeeds but the link is lost on restart. With a misconfigured
+   store (unknown value, or `supabase` without credentials), `POST /api/share` returns `503` and
+   the Share button falls back to a self-contained `#h=...` hash URL.
 
-4. **Import (optional).** Confirm `POST /api/import` resolves a public chart archive or Helm repo URL:
-
-   ```bash
-   curl -sS -X POST https://<your-app>/api/import \
-     -H 'content-type: application/json' \
-     -d '{"url":"https://example.com/path/to/chart.tgz"}'
-   # -> {"ok":true,"files":{...},"source":{...}}
-   ```
-
-If all of the above behave as described, the deployment is healthy. For exact request/response shapes
-and status codes, see [API.md](API.md).
+For exact request/response shapes and status codes, see [API.md](API.md).

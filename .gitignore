@@ -1,5 +1,8 @@
 node_modules
-dist
+# Ignore build output, but keep the dir tracked so `go:embed all:dist` in
+# cmd/server compiles even before a frontend build has run.
+dist/*
+!dist/.gitkeep
 dist-ssr
 .vercel
 .env

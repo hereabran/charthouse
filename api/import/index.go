@@ -145,7 +145,7 @@ func fetch(ctx context.Context, target *url.URL) ([]byte, string, error) {
 		return nil, "", err
 	}
 	req.Header.Set("accept", "application/octet-stream, application/gzip, application/zip, */*")
-	req.Header.Set("user-agent", "helm-playground/1 (+https://github.com/)")
+	req.Header.Set("user-agent", "charthouse/1 (+https://github.com/)")
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -3,11 +3,14 @@ import { Check, Copy, Link2, Loader2 } from 'lucide-react'
 import { useChartStore } from '@/store/chart-store'
 import { createShortShare, encodePayloadToHash } from '@/lib/share-client'
 import { Modal } from '@/components/ui/Modal'
+import type { SharePayload } from '@/types/chart'
 
 export function ShareButton() {
   const files = useChartStore((s) => s.files)
   const releaseName = useChartStore((s) => s.releaseName)
   const namespace = useChartStore((s) => s.namespace)
+  const mode = useChartStore((s) => s.mode)
+  const singleTemplate = useChartStore((s) => s.singleTemplate)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
@@ -18,7 +21,12 @@ export function ShareButton() {
     setBusy(true)
     setCopied(false)
     try {
-      const payload = { files, releaseName, namespace }
+      // Values travel in `files` for both modes; single mode also carries its
+      // scratch template so the recipient lands in the same view.
+      const payload: SharePayload =
+        mode === 'single'
+          ? { files, releaseName, namespace, mode, single: { template: singleTemplate } }
+          : { files, releaseName, namespace, mode: 'chart' }
       let url: string
       try {
         const res = await createShortShare(payload)

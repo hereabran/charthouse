@@ -1,9 +1,23 @@
 import type { ChartFiles } from '@/types/chart'
 
+// Default scratch template for single-template mode. It renders against the
+// SHARED values.yaml (the same values chart mode uses), so it references keys
+// that exist in SAMPLE_CHART's values.yaml below.
+export const SAMPLE_SINGLE_TEMPLATE = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  replicas: {{ .Values.replicaCount | quote }}
+  image: {{ .Values.image.repository | quote }}
+`
+
 export const SAMPLE_CHART: ChartFiles = {
   'Chart.yaml': `apiVersion: v2
 name: hello
-description: A minimal Helm chart for the playground
+description: A minimal Helm chart for the Charthouse
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
@@ -28,7 +42,7 @@ resources:
     memory: 64Mi
 
 env:
-  GREETING: "hello from helm playground"
+  GREETING: "hello from Charthouse!"
 `,
   'values.schema.json': `{
   "$schema": "http://json-schema.org/draft-07/schema#",

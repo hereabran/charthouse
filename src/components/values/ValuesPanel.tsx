@@ -12,6 +12,8 @@ const SCHEMA_FILE = 'values.schema.json'
 
 type Tab = typeof VALUES_YAML | typeof VALUES_OVERRIDE_YAML
 
+// Values live in `files` and are shared across chart and single mode, so this
+// panel is mode-agnostic — it always edits values.yaml / values.override.yaml.
 export function ValuesPanel() {
   const files = useChartStore((s) => s.files)
   const setFile = useChartStore((s) => s.setFile)
@@ -41,7 +43,7 @@ export function ValuesPanel() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [schemaJson, files[tab], tab])
+  }, [schemaJson, files, tab])
 
   function ensureFile(path: Tab) {
     if (!(path in files)) addFile(path, '')
@@ -54,7 +56,10 @@ export function ValuesPanel() {
         <span>values</span>
         <div className="flex items-center gap-1">
           {hasSchema && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-gv-yellow/20 text-gv-yellow" title="values.schema.json detected — validation active">
+            <span
+              className="text-[9px] px-1 py-0.5 rounded bg-gv-yellow/20 text-gv-yellow"
+              title="values.schema.json detected — validation active"
+            >
               schema
             </span>
           )}
@@ -119,7 +124,9 @@ export function ValuesPanel() {
         width="sm"
         footer={
           <>
-            <button className="hp-btn" onClick={() => setShowDeleteModal(false)}>Cancel</button>
+            <button className="hp-btn" onClick={() => setShowDeleteModal(false)}>
+              Cancel
+            </button>
             <button
               className="hp-btn hp-btn-danger"
               onClick={() => {
@@ -134,7 +141,8 @@ export function ValuesPanel() {
         }
       >
         <p className="text-gv-fg">
-          This will permanently delete <span className="text-gv-yellow font-bold">{VALUES_OVERRIDE_YAML}</span>.
+          This will permanently delete{' '}
+          <span className="text-gv-yellow font-bold">{VALUES_OVERRIDE_YAML}</span>.
         </p>
       </Modal>
     </div>

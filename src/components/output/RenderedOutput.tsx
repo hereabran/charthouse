@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Copy, Download, ChevronDown, Loader2, TriangleAlert } from 'lucide-react'
+import { Copy, Download, ChevronDown, Loader2, TriangleAlert, Workflow } from 'lucide-react'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { useRenderStore } from '@/store/render-store'
+
+// Lazy so React Flow + dagre stay out of the initial bundle.
+const TopologyModal = lazy(() => import('@/components/topology/TopologyModal'))
 
 type Doc = { kind: string; name: string; source: string; body: string }
 
@@ -30,6 +33,7 @@ export function RenderedOutput() {
   const { loading, ok, stdout, stderr, durationMs, error, helmVersion, lastRenderedAt } = useRenderStore()
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [topoOpen, setTopoOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const docs = useMemo(() => splitDocs(stdout), [stdout])
@@ -93,6 +97,15 @@ export function RenderedOutput() {
         <div className="flex items-center gap-2">
           {helmVersion && <span className="hp-chip">{helmVersion}</span>}
           {lastRenderedAt && <span className="hp-chip">{durationMs} ms</span>}
+          <button
+            className="hp-btn"
+            onClick={() => setTopoOpen(true)}
+            disabled={docs.length === 0}
+            title="View the rendered resources as a topology graph"
+          >
+            <Workflow size={12} />
+            <span>topology</span>
+          </button>
           <button className="hp-btn" onClick={copy} title="Copy">
             <Copy size={12} />
           </button>
@@ -160,6 +173,12 @@ export function RenderedOutput() {
           ariaLabel="Rendered output"
         />
       </div>
+
+      {topoOpen && (
+        <Suspense fallback={null}>
+          <TopologyModal open={topoOpen} onClose={() => setTopoOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-helm-playground: a real-time Helm template rendering UI (Vite + React + TypeScript
+charthouse: a real-time Helm template rendering UI (Vite + React + TypeScript
 frontend; Go serverless handlers under `api/` rendering charts in-process via the
 Helm v4 Go SDK).
 

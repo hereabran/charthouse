@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
-import { useChartStore } from '@/store/chart-store'
+import { buildRenderFiles, useChartStore } from '@/store/chart-store'
 import { useRenderStore } from '@/store/render-store'
 import { renderChart } from './helm-client'
 
 export function useDebouncedRender(delayMs = 350) {
+  const mode = useChartStore((s) => s.mode)
   const files = useChartStore((s) => s.files)
+  const singleTemplate = useChartStore((s) => s.singleTemplate)
   const releaseName = useChartStore((s) => s.releaseName)
   const namespace = useChartStore((s) => s.namespace)
   const setLoading = useRenderStore((s) => s.setLoading)
@@ -19,8 +21,9 @@ export function useDebouncedRender(delayMs = 350) {
       abortRef.current = ac
       setLoading(true)
       try {
+        const renderFiles = buildRenderFiles({ mode, files, singleTemplate })
         const res = await renderChart(
-          { files, releaseName, namespace },
+          { files: renderFiles, releaseName, namespace },
           ac.signal,
         )
         setResult(res)
@@ -30,5 +33,15 @@ export function useDebouncedRender(delayMs = 350) {
       }
     }, delayMs)
     return () => clearTimeout(handle)
-  }, [files, releaseName, namespace, delayMs, setLoading, setResult, setError])
+  }, [
+    mode,
+    files,
+    singleTemplate,
+    releaseName,
+    namespace,
+    delayMs,
+    setLoading,
+    setResult,
+    setError,
+  ])
 }

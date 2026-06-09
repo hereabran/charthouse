@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	importchart "helm-playground/api/import"
-	"helm-playground/api/render"
-	"helm-playground/api/share"
+	importchart "charthouse/api/import"
+	"charthouse/api/render"
+	"charthouse/api/share"
 )
 
 func main() {
@@ -30,6 +30,6 @@ func main() {
 		})
 	})
 
-	log.Printf("[helm-playground] dev API listening on http://localhost:%s", port)
+	log.Printf("[charthouse] dev API listening on http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }

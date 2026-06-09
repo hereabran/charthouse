@@ -1,5 +1,5 @@
 {
-  "$schema_note": "Machine-readable scope boundary for helm-playground. Each feature: id (kebab), title, status (done|in_progress|planned), definition_of_done (concrete + testable), optional notes. Work one feature at a time; verify against definition_of_done before marking done.",
+  "$schema_note": "Machine-readable scope boundary for Charthouse. Each feature: id (kebab), title, status (done|in_progress|planned), definition_of_done (concrete + testable), optional notes. Work one feature at a time; verify against definition_of_done before marking done.",
   "scope_rules": {
     "one_feature_at_a_time": true,
     "ephemeral_data_only": true
@@ -9,7 +9,7 @@
       "id": "three-column-layout",
       "title": "Three-column resizable layout",
       "status": "done",
-      "definition_of_done": "App renders Toolbar (top), a three-column body, and StatusBar (footer). Body shows TemplatePanel (left), ValuesPanel (middle), RenderedOutput (right) via a CSS grid with two 6px draggable splitters. Dragging a splitter resizes columns and persists weights to localStorage 'hp:layout:weights'; double-clicking a splitter resets to DEFAULT_WEIGHTS [1,1,1.2]; below the lg breakpoint the columns collapse to a vertical stack.",
+      "definition_of_done": "App renders Toolbar (top), a three-column body, and StatusBar (footer). Body shows the left editor panel, ValuesPanel (middle), RenderedOutput (right) via a CSS grid with two 6px draggable splitters. Dragging a splitter resizes columns and persists weights to localStorage 'hp:layout:weights'; double-clicking a splitter resets to DEFAULT_WEIGHTS [1,1,1.2]; below the lg breakpoint the columns collapse to a vertical stack.",
       "notes": "src/App.tsx, src/components/layout/ThreeColumnLayout.tsx. MIN_WEIGHT 0.25."
     },
     {
@@ -27,6 +27,13 @@
       "notes": "src/components/editor/FileTree.tsx, src/store/chart-store.ts mutators. chart-store also exposes a renameFile mutator, but no rename action is wired into the FileTree UI."
     },
     {
+      "id": "chart-single-mode-switch",
+      "title": "Chart / single-file editing mode toggle",
+      "status": "done",
+      "definition_of_done": "The Toolbar shows a segmented 'Chart | Single file' toggle (src/components/layout/Toolbar.tsx) bound to chart-store.mode ('chart'|'single') via setMode. In single mode the left column swaps TemplatePanel for SingleTemplatePanel (editing chart-store.singleTemplate, a scratch template). Values (values.yaml / values.override.yaml) are SHARED across both modes via chart-store.files, so ValuesPanel is mode-agnostic and switching modes never overwrites or loses values. buildRenderFiles(state) passes chart-mode files through unchanged, and in single mode synthesizes a minimal chart (Chart.yaml apiVersion v2, name 'chart', version 0.1.0; templates/template.yaml = singleTemplate; values.yaml and values.override.yaml taken from files) before POSTing to /api/render. mode and singleTemplate persist in localStorage 'hp:chart'. SharePayload round-trips mode plus single {template}; values travel in files; legacy shares with no mode load as 'chart'.",
+      "notes": "src/store/chart-store.ts (mode, singleTemplate, setMode/setSingleTemplate, buildRenderFiles), src/components/editor/SingleTemplatePanel.tsx, src/components/values/ValuesPanel.tsx (mode-agnostic; shared values), src/types/chart.ts (SharePayload, SINGLE_TEMPLATE_PATH). Verified via pnpm typecheck, test, and build."
+    },
+    {
       "id": "values-and-override",
       "title": "values.yaml and values.override.yaml tabs",
       "status": "done",
@@ -37,15 +44,22 @@
       "id": "live-debounced-render",
       "title": "Live debounced Helm render on edit",
       "status": "done",
-      "definition_of_done": "Editing any file, releaseName, or namespace triggers a 300ms-debounced POST to /api/render (useDebouncedRender(300)); the prior request is aborted via AbortController. The backend renders the in-memory chart through the Helm v4 Go SDK in-process (action.NewInstall, DryRunStrategy=DryRunClient, storage driver 'memory') and returns {ok, stdout, stderr, durationMs, helmVersion}. render-store is updated; HTTP 422 is treated as a valid helm-error response, not an exception. A correct sample chart yields ok:true with rendered manifests in stdout.",
-      "notes": "src/lib/use-debounced-render.ts, src/lib/helm-client.ts, api/render/index.go, cmd/dev/main.go. 10s render timeout; 5 MiB body cap. helm.sh/helm/v4 v4.2.0."
+      "definition_of_done": "Editing any file, releaseName, or namespace triggers a 300ms-debounced POST to /api/render (useDebouncedRender(300)); the prior request is aborted via AbortController. The backend renders the in-memory chart through the Helm v4 Go SDK in-process (action.NewInstall, DryRunStrategy=DryRunClient, storage driver 'memory'), with no helm CLI exec, and returns {ok, stdout, stderr, durationMs, helmVersion}. render-store is updated; HTTP 422 is treated as a valid helm-error response, not an exception. A correct sample chart yields ok:true with rendered manifests in stdout.",
+      "notes": "src/lib/use-debounced-render.ts, src/lib/helm-client.ts, api/render/index.go, cmd/dev/main.go. Limits: 10s render timeout, 5 MiB body, 500 files, 256 KiB/file, 4 MiB total. helm.sh/helm/v4 v4.2.0; helmVersion reports e.g. 'v4.2.0 sdk'."
     },
     {
       "id": "rendered-output-viewer",
       "title": "Rendered output viewer with per-document selection",
       "status": "done",
-      "definition_of_done": "RenderedOutput reads render-store and shows the rendered manifest in a read-only Monaco editor at virtual path 'rendered.yaml'. stdout is split into documents on /^---\\s*$/m; a multi-select dropdown filters which documents are shown (empty selection = all). Copy uses navigator.clipboard and download produces a Blob. Errors/stderr, helmVersion, and durationMs are displayed.",
+      "definition_of_done": "RenderedOutput reads render-store and shows the rendered manifest in a read-only Monaco editor at virtual path 'rendered.yaml'. stdout is split into documents on /^---\\s*$/m; a multi-select dropdown filters which documents are shown (empty selection = all). Copy uses navigator.clipboard and download produces a Blob. Errors/stderr, helmVersion, and durationMs are displayed. The header also exposes a 'topology' button that opens the resource topology viewer, disabled when there are 0 rendered docs.",
       "notes": "src/components/output/RenderedOutput.tsx."
+    },
+    {
+      "id": "resource-topology-viewer",
+      "title": "Rendered-manifest resource topology viewer",
+      "status": "done",
+      "definition_of_done": "A pure-TypeScript engine buildTopology(stdout, defaultNamespace='default') -> {nodes, edges} (src/lib/topology/index.ts re-exports it from infer.ts) parses the rendered multi-document YAML with js-yaml and infers relationships from the manifests alone (no cluster access): Service->workload via label selector, Ingress->Service and Ingress->Secret (tls), workload->ConfigMap/Secret (volumes/projected/envFrom/env/imagePullSecrets), workload->ServiceAccount, workload->PVC, HPA->workload (scaleTargetRef), PodDisruptionBudget/NetworkPolicy->workload (selector), RoleBinding/ClusterRoleBinding->ServiceAccount+Role, and ownerReferences. Dangling refs become faded 'external' nodes; nodes carry a group (workload/networking/config/rbac/storage/autoscaling/other); output is deterministic. The UI (src/components/topology/{TopologyModal,TopologyGraph,ResourceNode,ResourcePanel}.tsx + layout.ts dagre top-down + groupTheme.ts) renders a full-window React Flow (@xyflow/react v12) overlay; clicking a node opens a side panel showing that resource's rendered YAML in a read-only Monaco editor. The modal is lazy()-loaded behind Suspense so React Flow/dagre ship in a separate chunk. 'pnpm test' (vitest run) passes src/lib/topology/infer.test.ts (10 tests).",
+      "notes": "src/lib/topology/{types,parse,infer,index}.ts, src/components/topology/*. Trigger lives in src/components/output/RenderedOutput.tsx. Dev deps: @xyflow/react, dagre, @types/dagre, vitest. Verified: pnpm test 10/10, pnpm build splits the topology chunk."
     },
     {
       "id": "schema-validation",
@@ -69,18 +83,46 @@
       "notes": "src/components/ui/ImportButton.tsx, src/lib/import-client.ts, api/import/index.go, api/import/repo.go. Intentionally allows RFC 6598 (Tailscale 100.64/10)."
     },
     {
-      "id": "share-short-url",
-      "title": "Share via Supabase-backed short URL",
+      "id": "pluggable-share-store",
+      "title": "Pluggable share store (memory / file / supabase via SHARE_STORE)",
       "status": "done",
-      "definition_of_done": "The Share button POSTs {payload:{files,releaseName,namespace}} to /api/share; when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set the Go handler inserts a row into helm_playground_shares (id from crypto/rand over alphabet '23456789abcdefghjkmnpqrstuvwxyz', length 8) via Supabase PostgREST and returns {id}. The client builds origin + '/s/' + id and copies it to the clipboard. Loading /s/:id (id matching /^\\/s\\/([a-z0-9]{6,16})$/) GETs /api/share?id= and replaceAll's the returned payload, then history.replaceState to '/'.",
-      "notes": "src/components/share/ShareButton.tsx, src/lib/share-client.ts, api/share/index.go. Status-of-record: implemented but unverified locally (requires Supabase configured)."
+      "definition_of_done": "A Store interface {Put(ctx,payload)->id; Get(ctx,id)->payload} (api/share/store/store.go) is selected at runtime by store.New() from SHARE_STORE: 'memory' (default) is an in-process map (ephemeral; links lost on restart), 'file' writes JSON files under SHARE_DIR (default ./data/shares) with atomic os.Rename writes (durable), and 'supabase' uses the PostgREST table 'charthouse_shares' with the service-role key. Shared constants: 8-char ids over alphabet '23456789abcdefghjkmnpqrstuvwxyz', IDPattern ^[a-z0-9]{6,16}$, MaxPayloadBytes 256 KiB. An unknown SHARE_STORE value, or 'supabase' without SUPABASE_URL/KEY, returns an error that the handler surfaces as 503.",
+      "notes": "api/share/store/{store,memory,file,supabase}.go. Verified: 'go build ./...' + 'go vet ./...' clean; cmd/server smoke shows memory and file (survives restart) round-trips."
+    },
+    {
+      "id": "share-short-url",
+      "title": "Share via store-backed short URL",
+      "status": "done",
+      "definition_of_done": "The Share button POSTs {payload:{mode,files,releaseName,namespace,single?}} to /api/share; the Go handler lazily builds the configured Store (sync.Once over store.New()) and inserts the payload, returning {id} (8-char id over alphabet '23456789abcdefghjkmnpqrstuvwxyz'). Persistence depends on SHARE_STORE: 'memory' (default) keeps links in-process, 'file' persists them under SHARE_DIR, 'supabase' stores them in the charthouse_shares table. The client builds origin + '/s/' + id and copies it to the clipboard. Loading /s/:id (id matching /^\\/s\\/([a-z0-9]{6,16})$/) GETs /api/share?id= -> 200 {id,payload} (404 unknown / 502 backend error) and replaceAll's the returned payload, then history.replaceState to '/'. 503 is returned only on explicit misconfiguration (unknown SHARE_STORE, or supabase missing credentials), so short links work out of the box on the default memory store.",
+      "notes": "src/components/share/ShareButton.tsx, src/lib/share-client.ts, api/share/index.go (uses the pluggable Store). Verified locally on memory and file stores via cmd/server smoke; supabase backend requires Supabase configured."
     },
     {
       "id": "share-hash-fallback",
       "title": "Share via self-contained hash URL fallback",
       "status": "done",
-      "definition_of_done": "When /api/share returns 503 (sharing unconfigured) or throws, the Share button falls back to origin + '/#h=' + base64url(pako.deflate(JSON.stringify({files,releaseName,namespace}))). On startup, decodePayloadFromHash matches /[#&]h=([A-Za-z0-9_-]+)/, inflates and JSON.parses the payload, replaceAll's it, and removes the hash via history.replaceState to location.pathname. Round-trip of a chart through encode->decode reproduces files, releaseName, and namespace.",
+      "definition_of_done": "When /api/share returns 503 (sharing misconfigured) or throws, the Share button falls back to origin + '/#h=' + base64url(pako.deflate(JSON.stringify(payload))). On startup, decodePayloadFromHash matches /[#&]h=([A-Za-z0-9_-]+)/, inflates and JSON.parses the payload, replaceAll's it, and removes the hash via history.replaceState to location.pathname. Round-trip of a chart through encode->decode reproduces mode, files, releaseName, namespace, and single state. With the default memory store this fallback only triggers on the rare 503.",
       "notes": "src/lib/share-client.ts, src/App.tsx useLoadFromUrl. Status-of-record: implemented but no automated test yet."
+    },
+    {
+      "id": "self-hosted-embedded-server",
+      "title": "Self-hosted single-binary server (cmd/server, go:embed)",
+      "status": "done",
+      "definition_of_done": "cmd/server/main.go is a single self-contained binary that serves /api/render, /api/share, /api/import AND the built SPA, embedded at compile time via '//go:embed all:dist' (the embed lives in the repo-root package 'charthouse' in embed.go, since go:embed cannot reference parent dirs). spaHandler falls back to index.html for unknown non-asset paths so client routes like /s/<id> resolve; unmatched /api/* return JSON 404; /assets/* get a long immutable cache; HTML is no-cache. It binds PORT (default 8080). 'pnpm serve' runs it via 'go run ./cmd/server'. Build order: 'pnpm build' must precede 'go build ./cmd/server' so dist/ exists.",
+      "notes": "cmd/server/main.go, embed.go, package.json 'serve' script. The dev-only cmd/dev/main.go (port 5174) is unchanged. Verified: cmd/server smoke serves embedded SPA at /, /s/:id fallback, JSON 404 on /api, render ok (helm v4.2.0 sdk), share round-trip."
+    },
+    {
+      "id": "docker-deployment",
+      "title": "Docker image and docker-compose deployment",
+      "status": "done",
+      "definition_of_done": "A multi-stage Dockerfile builds the SPA (node:22-alpine + pnpm build), compiles the embedding Go binary (golang:1.26-alpine, CGO_ENABLED=0, go build ./cmd/server), and ships it on gcr.io/distroless/static-debian12:nonroot, EXPOSE 8080, ENV PORT=8080 SHARE_STORE=memory SHARE_DIR=/data/shares, running as nonroot; a .dockerignore is present. docker-compose.yaml defines one service 'charthouse' (build ., ports 8080:8080) with SHARE_STORE=file + SHARE_DIR=/data/shares + a named volume charthouse-data mounted at /data for durable links, plus commented Supabase passthrough.",
+      "notes": "Dockerfile, docker-compose.yaml, .dockerignore. Docker build was NOT run locally (docker not installed on the dev machine); files are written but unbuilt here."
+    },
+    {
+      "id": "mit-license-and-rebrand",
+      "title": "MIT license and Charthouse rebrand",
+      "status": "done",
+      "definition_of_done": "The project is named 'Charthouse' (tagline 'Helm chart playground') across go.mod (module 'charthouse'), package.json (name 'charthouse'), index.html <title> 'Charthouse — Helm chart playground', and the Toolbar wordmark '⎈ Charthouse'. A LICENSE file contains the MIT License, 'Copyright (c) 2026 the Charthouse authors'. 'Helm' is referenced nominatively only (a playground for Helm charts), without implying endorsement by the Linux Foundation/CNCF.",
+      "notes": "go.mod, package.json, index.html, src/components/layout/Toolbar.tsx, LICENSE."
     },
     {
       "id": "gruvbox-theme-toggle",
@@ -93,22 +135,22 @@
       "id": "supabase-shares-migration",
       "title": "Supabase shares table migration",
       "status": "done",
-      "definition_of_done": "supabase/migrations/20260609000000_helm_playground_shares.sql creates public.helm_playground_shares (id text primary key, payload jsonb not null, created_at timestamptz not null default now()), creates index helm_playground_shares_created_at_idx on created_at, and enables row level security. Applying it via 'supabase db push' against a linked project lets the service-role-keyed /api/share read and write the table (RLS bypassed by service_role; no policies defined intentionally).",
-      "notes": "supabase/migrations/20260609000000_helm_playground_shares.sql, supabase/config.toml (project_id playgrounds, Postgres 15)."
+      "definition_of_done": "supabase/migrations/20260609000000_charthouse_shares.sql creates public.charthouse_shares (id text primary key, payload jsonb not null, created_at timestamptz not null default now()), creates index charthouse_shares_created_at_idx on created_at, and enables row level security. Applying it via 'supabase db push' against a linked project lets the service-role-keyed /api/share (SHARE_STORE=supabase) read and write the table (RLS bypassed by service_role; no policies defined intentionally).",
+      "notes": "supabase/migrations/20260609000000_charthouse_shares.sql, supabase/config.toml (project_id playgrounds, Postgres 15). Optional backend; the default memory store needs no Supabase."
     },
     {
       "id": "share-id-collision-retry",
       "title": "Retry short-share id generation on collision",
       "status": "planned",
-      "definition_of_done": "On /api/share POST, when Supabase rejects an insert due to a duplicate primary key, the handler regenerates a new id and retries (bounded attempts, e.g. up to 5) instead of returning a 502; a successful insert still returns {id}. A test inserting a known id and then forcing a collision confirms the handler recovers with a fresh id rather than failing.",
-      "notes": "api/share/index.go newID()/handlePost currently generate one id with no collision handling. The crypto/rand modulo bias over a 31-char alphabet is minor given the 31^8 keyspace but relevant to collision odds."
+      "definition_of_done": "On /api/share POST, when the configured Store rejects a Put due to a duplicate id, the handler regenerates a new id and retries (bounded attempts, e.g. up to 5) instead of failing; a successful insert still returns {id}. A test inserting a known id and then forcing a collision confirms the handler recovers with a fresh id rather than erroring.",
+      "notes": "store.NewID() generates one id with no collision handling; the modulo bias over the 31-char alphabet is minor given the 31^8 keyspace but relevant to collision odds. Applies across all backends (memory/file/supabase)."
     },
     {
       "id": "share-expiry-gc",
       "title": "Expiry / garbage collection of share rows",
       "status": "planned",
-      "definition_of_done": "Share rows in helm_playground_shares are subject to a documented retention policy: either an expiry column the loader honors (returning 404 for expired ids) or a scheduled cleanup job (e.g. delete rows older than N days using the existing created_at index). A test confirms that an expired/old row is no longer resolvable via GET /api/share?id=.",
-      "notes": "Currently rows have no expiry/GC (per clean-state-checklist.md); created_at index already exists to support an age-based sweep."
+      "definition_of_done": "Persisted shares (file and supabase stores) are subject to a documented retention policy: either an expiry the loader honors (returning 404 for expired ids) or a scheduled cleanup job (e.g. delete entries older than N days, using the existing created_at index for the supabase backend). A test confirms an expired/old share is no longer resolvable via GET /api/share?id=.",
+      "notes": "Currently persisted shares have no expiry/GC; the memory store is already ephemeral. The supabase migration's created_at index supports an age-based sweep."
     },
     {
       "id": "share-copy-link-toast",

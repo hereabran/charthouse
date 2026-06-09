@@ -94,3 +94,49 @@ html.sharp .rounded-full {
     border-radius: var(--hp-radius);
   }
 }
+
+/* React Flow (topology graph) themed to Gruvbox. */
+.ch-flow {
+  --xy-edge-stroke: var(--gv-dim);
+  --xy-edge-stroke-selected: var(--gv-accent);
+  --xy-connectionline-stroke: var(--gv-accent);
+  background: var(--gv-bg);
+}
+.ch-flow .react-flow__edge-text { fill: var(--gv-dim); font-size: 9px; }
+.ch-flow .react-flow__edge-textbg { fill: var(--gv-bg2); }
+.ch-flow .ch-edge-dangling .react-flow__edge-path {
+  stroke: var(--gv-orange);
+  stroke-dasharray: 4 3;
+}
+.ch-flow .react-flow__controls-button {
+  background: var(--gv-bg2);
+  border-bottom: 1px solid var(--gv-border);
+  color: var(--gv-fg);
+}
+.ch-flow .react-flow__controls-button:hover { background: var(--gv-bg3); }
+.ch-flow .react-flow__controls-button svg { fill: var(--gv-fg); }
+.ch-flow .react-flow__minimap { background: var(--gv-bg2); }
+.ch-flow .react-flow__attribution { display: none; }
+
+/* --- transitions: mode switch + topology open/close --- */
+@keyframes ch-overlay-in {
+  from { opacity: 0; transform: scale(0.99); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes ch-overlay-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.99); }
+}
+.ch-overlay-in  { animation: ch-overlay-in 180ms ease-out; }
+.ch-overlay-out { animation: ch-overlay-out 150ms ease-in forwards; }
+
+@keyframes ch-panel-swap {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ch-panel-swap { animation: ch-panel-swap 200ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-overlay-in, .ch-overlay-out, .ch-panel-swap,
+  .splash-icon, .splash-btn, .splash-fade { animation: none !important; }
+}

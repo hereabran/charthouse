@@ -96,7 +96,7 @@ confirm nothing slipped through.
       `hp:layout:weights` (column widths). Nothing chart-related is persisted
       server-side, so there's nothing to clean there.
 - [ ] If Supabase sharing was exercised, remember rows in
-      `helm_playground_shares` have no expiry/GC. Local dev runs without Supabase
+      `charthouse_shares` have no expiry/GC. Local dev runs without Supabase
       by default (Share falls back to `#h=` hash URLs), so usually nothing was
       written.
 

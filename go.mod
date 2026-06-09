@@ -1,4 +1,4 @@
-module helm-playground
+module charthouse
 
 go 1.26.0
 

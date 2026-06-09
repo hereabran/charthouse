@@ -1,6 +1,6 @@
 # API Reference
 
-The backend HTTP contract for helm-playground. Three functional endpoints, all
+The backend HTTP contract for charthouse. Three functional endpoints, all
 stateless: `/api/render`, `/api/share` (GET + POST), and `/api/import`. There is
 no health check, no version endpoint, and no auth on any route. Every other path
 returns a catch-all `404`.
@@ -16,18 +16,28 @@ documented.
 
 ## How requests reach these handlers
 
-The same three handlers serve both local dev and production — **the paths are
-identical** (`/api/render`, `/api/share`, `/api/import`).
+The same three handlers (`render.Handler`, `share.Handler`,
+`importchart.Handler`) back **three** entry points. The `/api/*` paths are
+**identical** across all three (`/api/render`, `/api/share`, `/api/import`) —
+only the wiring and port differ.
 
-- **Local dev**: `cmd/dev/main.go` builds an `http.ServeMux`, registers the three
-  exact paths, and listens on `API_PORT` (default `5174`). Any other path returns
-  `404` with JSON `{"error":"not found","path":"<requested-path>"}`. The Vite dev
-  server (port `5173`) proxies `/api` → `http://localhost:5174`; the Go server
-  itself does **not** serve the frontend, does **not** proxy to Vite, and sets
-  **no CORS headers**.
-- **Production (Vercel)**: each file under `api/` (`api/render/index.go`,
+- **Local dev** — `cmd/dev/main.go` builds an `http.ServeMux`, registers the
+  three exact paths, and listens on `API_PORT` (default `5174`). Any other path
+  returns `404` with JSON `{"error":"not found","path":"<requested-path>"}`. The
+  Vite dev server (port `5173`) proxies `/api` → `http://localhost:5174`; the dev
+  Go server itself does **not** serve the frontend, does **not** proxy to Vite,
+  and sets **no CORS headers**.
+- **Self-hosted server** — `cmd/server/main.go` is a single self-contained binary
+  (also the Docker image). It registers the same three handlers **and** serves the
+  built SPA, embedded into the binary at compile time. It listens on `PORT`
+  (default `8080`). Unknown non-asset paths fall back to `index.html` so client
+  routes like `/s/<id>` resolve in the SPA; unmatched `/api/*` paths get a JSON
+  `404` (`{"error":"not found"}`); `/assets/*` get a long immutable cache and HTML
+  is served `no-cache`.
+- **Vercel functions** — each file under `api/` (`api/render/index.go`,
   `api/share/index.go`, `api/import/index.go`) is deployed as a Go serverless
   function exporting `Handler`, mapped to the matching `/api/*` route by Vercel.
+  `vercel.json` also rewrites `/s/:id` → `/` so shared links land on the SPA.
 
 All handlers set these response headers on their JSON replies:
 
@@ -39,6 +49,9 @@ cache-control: no-store
 > Helm rendering is done **in-process** via the Helm v4 Go SDK
 > (`helm.sh/helm/v4`). There is no `helm` binary exec and no CLI subcommand. See
 > [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+
+The curl examples below use `http://localhost:8080` (the self-hosted server). For
+local dev, swap the port to `5174` (or hit the Vite proxy on `5173`).
 
 ---
 
@@ -127,7 +140,7 @@ in `stderr`, and (where available) `durationMs` / `helmVersion`.
 ### curl
 
 ```bash
-curl -sS -X POST http://localhost:5174/api/render \
+curl -sS -X POST http://localhost:8080/api/render \
   -H 'content-type: application/json' \
   -d '{
     "releaseName": "demo",
@@ -142,18 +155,44 @@ curl -sS -X POST http://localhost:5174/api/render \
 
 ---
 
+## Sharing: backing store
+
+`/api/share` (both GET and POST) is backed by a pluggable **Store**, selected at
+runtime by the `SHARE_STORE` environment variable. The store is initialized once
+per process (via `sync.Once`); an initialization failure is the **only** thing
+that produces a `503` (see below).
+
+| `SHARE_STORE` | Backend | Durability | Extra config |
+| --- | --- | --- | --- |
+| `memory` *(default)* | In-process map | Ephemeral — links are lost on restart | none |
+| `file` | One JSON file per share under `SHARE_DIR` (default `./data/shares`), atomic writes | Durable on disk | `SHARE_DIR` (optional) |
+| `supabase` | Supabase PostgREST table `charthouse_shares` via the service-role key | Durable | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (both required) |
+
+With `memory` (the default) and `file`, sharing works with **no external
+service** — short links are available out of the box. The `supabase` backend is
+opt-in and is the only one that requires credentials.
+
+**Shared across all backends:**
+
+- Generated ids are **8 chars** over the unambiguous alphabet
+  `23456789abcdefghjkmnpqrstuvwxyz` (`crypto/rand`). Used to build `/s/<id>`.
+- Accepted ids (on GET) must match `^[a-z0-9]{6,16}$` (also covers legacy ids).
+- Max accepted payload is **256 KiB**.
+
+If store initialization fails, the handler returns `503` and the SPA falls back
+to a self-contained `#h=` hash URL (the full state is encoded in the link, no
+backend needed). This happens **only** on explicit misconfiguration — e.g.
+`SHARE_STORE=supabase` with a missing `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`,
+or an unknown `SHARE_STORE` value. The default `memory` path never returns `503`.
+
+---
+
 ## POST /api/share
 
-Creates a short-share row in Supabase and returns its id. Persists via the
-Supabase PostgREST REST API (`POST <SUPABASE_URL>/rest/v1/helm_playground_shares`)
-using the service-role key — **no** Postgres driver.
+Stores a payload via the configured store and returns its id.
 
 **Method**: `POST` (this section). Any method other than `GET`/`POST` returns
 `405` with header `Allow: GET, POST`.
-
-**Requires configuration**: both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
-must be set. If either is empty, the handler returns **`503`** (see below) and the
-SPA falls back to a self-contained `#h=` hash URL.
 
 ### Request body
 
@@ -167,8 +206,8 @@ SPA falls back to a self-contained `#h=` hash URL.
 | --- | --- | --- | --- |
 | `payload` | JSON object | yes | Stored verbatim. Must be a JSON object (raw text must start with `{`). |
 
-The frontend sends `payload` as `{ files, releaseName, namespace }`, but the
-handler stores whatever JSON object it receives.
+The frontend sends `payload` as the share state, but the handler stores whatever
+JSON object it receives.
 
 ### Success response — `200 OK`
 
@@ -178,7 +217,7 @@ handler stores whatever JSON object it receives.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `id` | `string` | Newly generated 8-char id over alphabet `23456789abcdefghjkmnpqrstuvwxyz` (`crypto/rand`). Used to build `/s/<id>`. |
+| `id` | `string` | Newly generated 8-char id over alphabet `23456789abcdefghjkmnpqrstuvwxyz`. Used to build `/s/<id>`. |
 
 ### Error responses
 
@@ -188,17 +227,17 @@ POST errors return `{"error":"<message>"}`.
 | --- | --- | --- |
 | `400` Bad Request | JSON decode failure | `bad request: <err>` |
 | `400` Bad Request | Empty payload or not a JSON object | `payload required` |
-| `502` Bad Gateway | Supabase unreachable | `supabase unreachable: <err>` |
-| `502` Bad Gateway | Supabase responded `>= 400` | `supabase <code>: <body>` |
-| `500` Internal Server Error | id generation / marshal failure | `<err>` |
-| `503` Service Unavailable | Sharing not configured (missing env) | `sharing not configured: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY` |
+| `502` Bad Gateway | Store failed to persist (e.g. Supabase unreachable / `>= 400`, filesystem error, id-allocation failure) | `supabase 401: <body>` |
+| `503` Service Unavailable | Store not configured / failed to initialize (misconfiguration only) | `sharing not configured: SHARE_STORE=supabase requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY` |
 
-Upstream Supabase call timeout is **8 seconds**.
+> For the `supabase` backend, the upstream PostgREST call timeout is **8 seconds**
+> per request. The `memory` and `file` backends are local and have no network
+> timeout.
 
 ### curl
 
 ```bash
-curl -sS -X POST http://localhost:5174/api/share \
+curl -sS -X POST http://localhost:8080/api/share \
   -H 'content-type: application/json' \
   -d '{"payload":{"files":{"Chart.yaml":"apiVersion: v2\nname: hello\nversion: 0.1.0\n"},"releaseName":"demo","namespace":"default"}}'
 ```
@@ -207,13 +246,9 @@ curl -sS -X POST http://localhost:5174/api/share \
 
 ## GET /api/share?id=&lt;id&gt;
 
-Loads a previously shared payload by id. Reads via PostgREST
-(`GET <SUPABASE_URL>/rest/v1/helm_playground_shares?id=eq.<id>&select=payload&limit=1`)
-with `apikey` + `Authorization: Bearer` (the service-role key).
+Loads a previously shared payload by id from the configured store.
 
 **Method**: `GET` (this section). See the method note above for `405`.
-
-**Requires configuration**: same `503` behavior as POST when Supabase env is unset.
 
 ### Request
 
@@ -239,15 +274,14 @@ GET errors return `{"error":"<message>"}`.
 | Status | When | `error` example |
 | --- | --- | --- |
 | `400` Bad Request | `id` does not match the pattern | `invalid id` |
-| `404` Not Found | No row for that id | `not found` |
-| `502` Bad Gateway | Supabase unreachable / `>= 400` / decode failure | `supabase unreachable: <err>` |
-| `500` Internal Server Error | Request construction failure | `<err>` |
-| `503` Service Unavailable | Sharing not configured (missing env) | `sharing not configured: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY` |
+| `404` Not Found | No share for that id | `not found` |
+| `502` Bad Gateway | Store/upstream error (e.g. Supabase unreachable / `>= 400` / decode failure, filesystem error) | `supabase unreachable: <err>` |
+| `503` Service Unavailable | Store not configured / failed to initialize (misconfiguration only) | `sharing not configured: unknown SHARE_STORE "..." (want memory\|file\|supabase)` |
 
 ### curl
 
 ```bash
-curl -sS 'http://localhost:5174/api/share?id=abc23xyz'
+curl -sS 'http://localhost:8080/api/share?id=abc23xyz'
 ```
 
 ---
@@ -325,12 +359,12 @@ Errors return `{"ok":false,"error":"<message>"}` (`ok`/`error` only; `files` and
 
 ```bash
 # Direct archive
-curl -sS -X POST http://localhost:5174/api/import \
+curl -sS -X POST http://localhost:8080/api/import \
   -H 'content-type: application/json' \
   -d '{"url":"https://example.com/charts/hello-0.1.0.tgz"}'
 
 # Helm repo base URL (auto-picks the single chart, or 422 lists all)
-curl -sS -X POST http://localhost:5174/api/import \
+curl -sS -X POST http://localhost:8080/api/import \
   -H 'content-type: application/json' \
   -d '{"url":"https://charts.example.com/"}'
 ```
@@ -339,5 +373,7 @@ curl -sS -X POST http://localhost:5174/api/import \
 
 ## Catch-all
 
-Any path other than the three above returns `404`. In local dev the body is
-`{"error":"not found","path":"<requested-path>"}`.
+Any path other than the three above returns `404`. In local dev (`cmd/dev`) the
+body is `{"error":"not found","path":"<requested-path>"}`. On the self-hosted
+server (`cmd/server`), unmatched `/api/*` paths return `{"error":"not found"}`,
+while every other unknown path falls back to the SPA's `index.html`.

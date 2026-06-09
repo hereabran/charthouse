@@ -31,10 +31,10 @@ type helmChartV struct {
 // resolveURL turns whatever URL the user pasted into a direct tgz/zip URL.
 // Supported shapes:
 //   - direct archive (…/foo-1.2.3.tgz, …/chart.zip) → returned as-is
-//   - repo base URL (https://charts.signoz.io) → fetched /index.yaml; auto-picks
+//   - repo base URL (https://charts.example.io) → fetched /index.yaml; auto-picks
 //     when the repo has a single chart, otherwise returns an error listing
 //     available charts
-//   - repo + chart (https://charts.signoz.io/signoz) → strips the last segment
+//   - repo + chart (https://charts.example.io/chart) → strips the last segment
 //     as the chart name and resolves to the latest version's tgz url
 func resolveURL(ctx context.Context, in *url.URL) (*url.URL, error) {
 	if hasArchiveExt(in.Path) {
@@ -126,7 +126,7 @@ func fetchIndex(ctx context.Context, indexURL *url.URL) (*helmIndex, error) {
 		return nil, err
 	}
 	req.Header.Set("accept", "text/yaml, application/yaml, */*")
-	req.Header.Set("user-agent", "helm-playground/1")
+	req.Header.Set("user-agent", "charthouse/1")
 
 	resp, err := client.Do(req)
 	if err != nil {

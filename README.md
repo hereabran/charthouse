@@ -1,203 +1,169 @@
-# helm-playground
+# Charthouse
 
-A real-time Helm template rendering UI. Edit a chart on the left, tweak values in
-the middle, watch the rendered Kubernetes manifests update on the right — all in
-the browser, with no cluster and no `helm` binary required. Nothing is saved
-server-side: drop a chart, render, share a link, walk away.
+⎈ A realtime Helm chart playground: render templates live, explore resource
+topology, and share charts — self-hostable and vendor-neutral.
 
-```
-┌──────────────┬──────────────┬──────────────────────┐
-│ chart files  │ values.yaml  │  rendered manifests   │
-│ + file tree  │ + override   │  (live helm template) │
-│   (Monaco)   │  (Monaco)    │   read-only, by doc    │
-└──────────────┴──────────────┴──────────────────────┘
-```
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-## What it does
+## What & why
 
-- **Live render** — every edit is debounced (~300ms) and shipped to the backend,
-  which renders the chart through the **Helm Go SDK** (in-process, no CLI) and
-  returns the manifests. Output splits into per-document tabs.
-- **Bring your own chart** — start from the bundled sample, create/rename/delete
-  files in the tree, upload a folder / `.zip` / `.tgz`, or import a chart
-  straight from a URL or Helm repo.
-- **Values + override** — `values.yaml` plus a separate `values.override.yaml`
-  tab (applied on top, the moral equivalent of `helm template ... -f override`),
-  with optional JSON-schema validation surfaced as inline editor warnings.
-- **Gruvbox theme** — light/dark toggle, 7 accent colors, and a sharp/rounded
-  corner switch. Preferences persist in `localStorage`.
-- **Shareable URLs** — one click copies a link that reproduces the exact chart,
-  release name, and namespace. Backed by a short `/s/<id>` URL when Supabase is
-  configured, or a self-contained hash URL when it isn't.
+Charthouse is a browser-based playground for Helm charts. Edit chart files on the
+left, tweak `values.yaml` in the middle, and watch the rendered Kubernetes
+manifests update live on the right — no cluster, no `helm` binary, and nothing
+stored server-side. Rendering happens in-process through the Helm Go SDK, so
+results match what `helm template` would produce. It's built to be easy to
+self-host: a single Go binary (with the UI embedded) or a one-command Docker
+container, with no required external services.
+
+## Screenshots
+
+![Realtime render — three-column editor](./docs/screenshot-render.png)
+
+![Resource topology graph](./docs/screenshot-topology.png)
+
+> These images are placeholders and still need to be added.
 
 ## Features
 
-- **3-column layout** — resizable columns: file tree + editor, values + override,
-  live rendered output. Collapses to a vertical stack on narrow screens.
-- **Live render** — debounced edits sent to `/api/render`; output and per-document
-  tabs update in place. Helm errors are shown inline rather than thrown away.
-- **Upload chart** — drop a folder, `.zip`, or `.tgz` onto the window, or use the
-  toolbar `upload` menu. The top-level chart directory is auto-stripped.
-- **Import from URL** — paste a direct `.tgz`/`.tar.gz`/`.zip` link, a Helm repo
-  base URL, or a repo + chart URL; the server fetches and extracts it for you
-  (with SSRF protection against private/loopback hosts).
-- **Edit in browser** — Monaco editor for templates, values, and helpers. Create,
-  rename, and delete files (and folders) from the tree.
-- **values.override.yaml** — separate tab, applied after `values.yaml`.
-- **Schema validation** — when `values.schema.json` is present, values are checked
-  with Ajv and errors are mapped to Monaco markers.
-- **Shareable URLs** —
-  - If `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set: a short URL
-    `/s/abc123` backed by a Supabase row.
-  - Otherwise: a self-contained `#h=<deflated base64>` hash URL (long, but needs
-    no backend).
-- **Gruvbox theme** with light/dark toggle, accent colors, and rounded/sharp
-  corners — all persisted in `localStorage`.
+- **3-column realtime render** — file tree + editor, values + override, and live
+  rendered output, updating as you type.
+- **Two editing modes** — full **Chart mode** (a real chart with a file tree) and
+  a lightweight **Single-file mode** for one template against one set of values.
+- **Interactive resource topology** — render manifests into a Kubernetes resource
+  graph and click any node to inspect its rendered YAML.
+- **Bring your own chart** — upload a chart as a folder, `.zip`, or `.tgz`.
+- **Import from a URL** — pull a chart straight from a direct archive link or a
+  Helm repo.
+- **Values + override with schema validation** — `values.yaml` plus a separate
+  `values.override.yaml` (applied on top), with inline JSON-schema validation
+  when `values.schema.json` is present.
+- **Shareable links** — one click reproduces the exact chart, release name, and
+  namespace.
+- **Gruvbox theme** — light/dark toggle, accent colors, and rounded/sharp corners.
+- **Ephemeral by design** — no accounts and nothing persisted server-side, except
+  opt-in shared links.
 
 ## Quickstart
 
-Prerequisites (advisory — only `packageManager` is enforced, via `package.json`):
+### Docker (recommended)
 
-- `pnpm` 11+ (the repo pins `pnpm@11.5.1`)
-- `node` 22.13+ (for the pinned pnpm release)
-- `go` 1.26+ (for the API; rendering uses the Helm Go SDK, so **no** `helm`
-  binary is needed)
+```sh
+docker compose up --build
+```
+
+Then open <http://localhost:8080>.
+
+### Run from source (local dev)
+
+Prerequisites: Node 22+, pnpm, and Go 1.26+. The Helm CLI is **not** required —
+rendering uses the Helm Go SDK in-process.
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-`pnpm dev` runs the frontend and backend together (via `concurrently`):
+Then open <http://localhost:5173>.
 
-- **Vite** dev server on <http://localhost:5173> (the frontend)
-- **Go** dev API on <http://localhost:5174>, proxied by Vite at `/api/*`
+`pnpm dev` runs the Vite frontend (port 5173) and the Go dev API (port 5174)
+together; Vite proxies `/api/*` to the dev API.
 
-Open <http://localhost:5173> — the sample chart renders immediately.
+## Self-hosting as a single binary
 
-Run them individually if you prefer:
-
-```sh
-pnpm dev:vite   # frontend only (vite, port 5173)
-pnpm dev:api    # backend only  (go run ./cmd/dev, port 5174)
-```
-
-Other scripts:
+The production server embeds the built UI at compile time and serves the SPA plus
+all API routes from one binary. Build the UI first, then build and run the binary:
 
 ```sh
-pnpm build      # tsc -b && vite build  → dist/
-pnpm preview    # serve the built dist/ locally
-pnpm typecheck  # tsc -b --noEmit
-pnpm lint       # eslint .ts/.tsx (note: eslint is not in devDependencies — known debt)
+pnpm build
+go build -o charthouse ./cmd/server
+./charthouse
 ```
 
-### Smoke test
+The server listens on <http://localhost:8080>.
 
-After `pnpm dev`, hit the render endpoint directly from another shell:
+## Configuration
 
-```sh
-curl -s http://localhost:5174/api/render \
-  -H 'content-type: application/json' \
-  -d "$(node -e 'const f={
-  "Chart.yaml":"apiVersion: v2\nname: smoke\nversion: 0.1.0\n",
-  "values.yaml":"replicas: 1\n",
-  "templates/cm.yaml":"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: smoke\ndata:\n  r: \"{{ .Values.replicas }}\"\n"
-};
-process.stdout.write(JSON.stringify({files:f,releaseName:"demo",namespace:"default"}));')" \
-  | jq .
-```
+All configuration is via environment variables; every value is optional.
 
-Expected: `{ "ok": true, "stdout": "...ConfigMap...", "stderr": "", "durationMs": <ms>, "helmVersion": "v... sdk" }`.
+| Variable                    | Default          | Meaning                                                                 |
+| --------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `PORT`                      | `8080`           | HTTP port for the self-hosted server (`cmd/server`).                    |
+| `SHARE_STORE`               | `memory`         | Share-link backend: `memory`, `file`, or `supabase`.                    |
+| `SHARE_DIR`                 | `./data/shares`  | Directory for the `file` store (used only when `SHARE_STORE=file`).     |
+| `SUPABASE_URL`              | _(unset)_        | Supabase project URL (used only when `SHARE_STORE=supabase`).           |
+| `SUPABASE_SERVICE_ROLE_KEY` | _(unset)_        | Supabase service-role key — **server-only**, never expose to the browser. |
 
-See [docs/API.md](./docs/API.md) for the full request/response contracts, status
-codes, and render limits (file count, per-file and total size caps, timeout).
+The `memory` store is ephemeral (links are lost on restart); the `file` and
+`supabase` stores are durable. The service-role key is a server-only secret —
+keep it out of the client bundle and out of version control.
 
 ## How sharing works
 
-The Share button always produces a URL that fully reproduces the current chart,
-release name, and namespace. It picks the best available mechanism:
+The Share button always produces a URL that reproduces the current chart, release
+name, and namespace. When a share store is configured (or the default `memory`
+store is active), the payload is saved and you get a short `/s/<id>` link. If
+sharing is unavailable (for example, `SHARE_STORE=supabase` without its
+credentials), Charthouse falls back to encoding the whole chart in a `#h=` URL
+hash — a longer link that needs no backend at all.
 
-- **Short URL (`/s/<id>`)** — used when the backend has Supabase configured. The
-  payload is `POST`ed to `/api/share`, persisted in the `helm_playground_shares`
-  table, and you get back a tidy `https://…/s/abc123` link. On load, the SPA
-  resolves the `id` and rehydrates the chart. (`vercel.json` rewrites `/s/:id`
-  to `/` so the SPA can handle it.)
-- **Hash URL (`#h=<deflated base64>`)** — the no-backend fallback. The whole
-  chart is JSON-serialized, deflated with pako, base64url-encoded, and appended
-  to the URL hash. It's longer (a few KB) but needs zero infrastructure. On load
-  the app decodes it and removes the hash from history.
+## Deployment options
 
-If Supabase isn't configured, `/api/share` returns `503` and the frontend
-transparently falls back to the hash URL — so sharing always works.
+- **Docker / Compose (recommended)** — `docker compose up --build`. The bundled
+  compose file uses the durable `file` store with a named volume.
+- **Single binary** — `pnpm build && go build -o charthouse ./cmd/server`, then
+  run `./charthouse`. The binary serves the embedded UI and all API routes.
+- **Vercel + Supabase (optional)** — set `SHARE_STORE=supabase`, provide the two
+  Supabase variables, and apply the migration in `supabase/migrations/`.
+
+See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for details.
 
 ## Tech stack
 
-| Layer        | Tools                                                          |
-| ------------ | ------------------------------------------------------------- |
-| Frontend     | React 19, Vite 6, TypeScript 5.7, Zustand                     |
-| Styling      | Tailwind CSS 3.4, Gruvbox CSS variables                       |
-| Editor       | Monaco (`@monaco-editor/react`, loaded from a CDN)            |
-| Backend      | Go 1.26 serverless-style handlers + a local dev server        |
-| Rendering    | `helm.sh/helm/v4` (Helm Go SDK, in-process)                   |
-| Share store  | Supabase (PostgREST) — optional                               |
-| Tooling      | pnpm 11, ESLint, Vercel (deploy)                              |
+| Layer      | Tools                                            |
+| ---------- | ------------------------------------------------ |
+| Frontend   | React 19, Vite, TypeScript                       |
+| Styling    | Tailwind CSS (Gruvbox theme)                     |
+| Editor     | Monaco                                            |
+| Topology   | React Flow                                        |
+| Backend    | Go                                               |
+| Rendering  | Helm v4 Go SDK (in-process)                      |
+| Tooling    | pnpm                                             |
 
 ## Documentation
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — how the frontend, dev server,
   and Go handlers fit together; the render pipeline and data flow.
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) — local setup, scripts, ports,
-  project layout, and conventions.
-- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — deploying to Vercel + Supabase, env
-  vars, and the Supabase-less fallback.
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) — local setup, scripts, ports, and
+  conventions.
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — Docker, the single binary, and the
+  optional Vercel + Supabase path.
 - [docs/API.md](./docs/API.md) — the `/api/render`, `/api/share`, and
   `/api/import` HTTP contracts, limits, and status codes.
+- **For AI agents:** start with [CLAUDE.md](./CLAUDE.md) — the agent-facing map of
+  the repo, verification commands, and workflow.
 
-## Project layout
+## Contributing
 
-```
-.
-├── api/                         # Go serverless-style handlers
-│   ├── render/index.go          #   POST /api/render  — Helm SDK dry-run render
-│   ├── share/index.go           #   GET/POST /api/share — Supabase short URLs
-│   └── import/                  #   POST /api/import — fetch + extract a chart
-│       ├── index.go
-│       └── repo.go
-├── cmd/dev/main.go              # Local Go dev API server (port 5174)
-├── supabase/
-│   ├── config.toml
-│   └── migrations/
-│       └── 20260609000000_helm_playground_shares.sql
-├── src/                         # Vite + React + TS frontend
-│   ├── App.tsx
-│   ├── main.tsx
-│   ├── components/{layout,editor,values,output,upload,share,theme,ui}/...
-│   ├── store/{chart-store,render-store,theme-store,border-store}.ts
-│   ├── lib/{helm-client,share-client,import-client,chart-archive,schema-validate,use-debounced-render,sample-chart}.ts
-│   ├── styles/{globals,gruvbox}.css
-│   └── types/chart.ts
-├── vercel.json
-├── vite.config.ts
-├── go.mod / go.sum
-└── package.json
+Contributions are welcome. Before opening a pull request, please run the
+verification commands:
+
+```sh
+pnpm typecheck && pnpm test && pnpm build
+go build ./... && go vet ./...
 ```
 
-## For AI agents
+Note: ESLint is referenced by the `lint` script but is not yet wired into
+`devDependencies`, so `pnpm lint` does not currently run — treat it as known debt
+rather than a runnable check.
 
-If you're an AI agent working in this repo, start with [CLAUDE.md](./CLAUDE.md).
-It's the agent-facing map: it points to the detail docs above, the verification
-commands, the current scope, and the session workflow. Keep changes to one
-feature at a time and verify before committing.
+## License
 
-## Notes
+Charthouse is released under the [MIT License](./LICENSE).
 
-- **No persistent chart storage.** Charts live in `localStorage` (`hp:chart`)
-  only; the server never stores your chart. Short-share rows in Supabase have no
-  expiry/GC.
-- **Monaco loads from a CDN** (`cdn.jsdelivr.net`), so the editors need network
-  access — offline/air-gapped use will degrade.
-- **`HELM_BIN` in `.env.example` is stale** — rendering uses the Helm Go SDK, so
-  it is unreferenced by the code.
-- **Never commit secrets.** `SUPABASE_SERVICE_ROLE_KEY` is a server-only secret
-  that bypasses Supabase RLS; keep it out of the client and out of git (`.env`
-  and `.env*.local` are gitignored).
+## Acknowledgements
+
+Charthouse is built on [Helm](https://helm.sh) and the broader Kubernetes
+ecosystem. "Helm" and "Kubernetes" are trademarks of their respective owners;
+they are used here nominatively only. Charthouse is an independent, community
+project and is not affiliated with, sponsored by, or endorsed by the Linux
+Foundation, the CNCF, or the Helm or Kubernetes projects.

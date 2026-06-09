@@ -1,0 +1,24 @@
+# Charthouse — one service, no external dependencies.
+#   docker compose up --build   ->   http://localhost:8080
+services:
+  charthouse:
+    build: .
+    image: charthouse:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      # Durable short links via the file store + the named volume below.
+      # Switch to "memory" for ephemeral links, or "supabase" for managed storage.
+      SHARE_STORE: "file"
+      SHARE_DIR: "/data/shares"
+      # --- Optional: managed storage instead of the file store ---
+      # SHARE_STORE: "supabase"
+      # SUPABASE_URL: "https://<project>.supabase.co"
+      # SUPABASE_SERVICE_ROLE_KEY: "<service-role-key>"   # server-only secret
+    volumes:
+      - charthouse-data:/data
+    restart: unless-stopped
+
+volumes:
+  charthouse-data:

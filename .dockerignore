@@ -1,0 +1,15 @@
+# Build artifacts and local state are produced inside the image, not copied in.
+node_modules
+dist
+dist-ssr
+data
+.git
+.github
+.vercel
+.claude
+.env
+.env.*
+*.log
+.DS_Store
+**/*.tsbuildinfo
+supabase/.temp

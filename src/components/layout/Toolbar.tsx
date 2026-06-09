@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Github, RotateCcw, AlertTriangle } from 'lucide-react'
+import clsx from 'clsx'
+import { Github, RotateCcw, AlertTriangle, FolderTree, FileCode } from 'lucide-react'
 import { useChartStore } from '@/store/chart-store'
 import { ThemeButton } from '@/components/theme/ThemeButton'
 import { ImportButton } from '@/components/ui/ImportButton'
@@ -13,13 +14,48 @@ export function Toolbar() {
   const setReleaseName = useChartStore((s) => s.setReleaseName)
   const setNamespace = useChartStore((s) => s.setNamespace)
   const resetToSample = useChartStore((s) => s.resetToSample)
+  const mode = useChartStore((s) => s.mode)
+  const setMode = useChartStore((s) => s.setMode)
   const [confirmReset, setConfirmReset] = useState(false)
 
   return (
     <header className="flex items-center gap-3 px-3 py-2 border-b border-gv-border bg-gv-bg2 shrink-0">
-      <div className="flex items-center gap-2 mr-2">
-        <span className="text-gv-accent font-bold tracking-tight">⎈ helm</span>
-        <span className="text-gv-dim text-xs">playground</span>
+      <div className="flex items-center gap-2 mr-1">
+        <span className="text-gv-accent font-bold tracking-tight">⎈ Charthouse</span>
+        <span className="text-gv-dim text-xs hidden xl:inline">Helm chart playground</span>
+      </div>
+
+      <div
+        className="flex items-center border border-gv-border overflow-hidden rounded mr-1"
+        role="group"
+        aria-label="Editing mode"
+      >
+        <button
+          type="button"
+          onClick={() => setMode('chart')}
+          className={clsx(
+            'flex items-center gap-1 px-2 py-1 text-[11px] transition-colors',
+            mode === 'chart' ? 'bg-gv-accent text-gv-bg' : 'text-gv-dim hover:text-gv-fg hover:bg-gv-bg3',
+          )}
+          title="Edit a full chart with multiple files"
+          aria-pressed={mode === 'chart'}
+        >
+          <FolderTree size={12} />
+          <span>Chart</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('single')}
+          className={clsx(
+            'flex items-center gap-1 px-2 py-1 text-[11px] transition-colors',
+            mode === 'single' ? 'bg-gv-accent text-gv-bg' : 'text-gv-dim hover:text-gv-fg hover:bg-gv-bg3',
+          )}
+          title="Edit a single template file"
+          aria-pressed={mode === 'single'}
+        >
+          <FileCode size={12} />
+          <span>Single file</span>
+        </button>
       </div>
 
       <div className="flex items-center gap-1 text-[11px] text-gv-dim">

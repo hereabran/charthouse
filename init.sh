@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# init.sh — environment health check + bootstrap for helm-playground.
+# init.sh — environment health check + bootstrap for charthouse.
 #
 # Session Lifecycle step: INIT. Run this once at the start of a session to
 # confirm the toolchain is present, install JS dependencies, and print how to
@@ -60,7 +60,7 @@ optional() {
 }
 
 # --- banner -----------------------------------------------------------------
-printf '\n%shelm-playground — environment check%s\n' "$BOLD" "$RESET"
+printf '\n%scharthouse — environment check%s\n' "$BOLD" "$RESET"
 printf '%sreal-time Helm template rendering UI%s\n\n' "$DIM" "$RESET"
 
 # --- required tools ---------------------------------------------------------

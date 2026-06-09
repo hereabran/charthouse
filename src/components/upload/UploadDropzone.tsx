@@ -17,7 +17,7 @@ function announce(msg: string) {
   // Light-weight non-blocking notification via console + window event.
   // The window-level drop handler also surfaces errors.
   // eslint-disable-next-line no-console
-  console.warn('[helm-playground]', msg)
+  console.warn('[charthouse]', msg)
 }
 
 async function filesFromDropEntries(entries: FileSystemEntry[]): Promise<ChartFiles> {
