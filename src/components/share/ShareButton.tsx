@@ -63,9 +63,9 @@ export function ShareButton() {
 
   return (
     <>
-      <button className="hp-btn" onClick={share} disabled={busy} title="Copy a shareable URL">
+      <button className="hp-btn" onClick={share} disabled={busy} title="Copy a shareable URL" aria-label="Share chart">
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
-        <span>share</span>
+        <span className="hidden sm:inline">share</span>
       </button>
 
       <Modal

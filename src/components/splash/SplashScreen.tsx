@@ -53,7 +53,7 @@ export function SplashScreen({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div
       className={clsx(
-        'fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-gv-bg',
+        'fixed inset-0 z-[100] flex justify-center overflow-y-auto bg-gv-bg',
         'transition-opacity duration-500',
         shown ? 'opacity-100' : 'opacity-0',
       )}
@@ -74,7 +74,7 @@ export function SplashScreen({ onDismiss }: { onDismiss: () => void }) {
 
       <div
         className={clsx(
-          'relative flex flex-col items-center px-6 text-center max-w-xl',
+          'relative my-auto flex flex-col items-center px-6 py-10 text-center max-w-xl',
           'transition-all duration-700 ease-out',
           shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
         )}

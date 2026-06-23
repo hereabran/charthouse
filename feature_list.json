@@ -9,8 +9,8 @@
       "id": "three-column-layout",
       "title": "Three-column resizable layout",
       "status": "done",
-      "definition_of_done": "App renders Toolbar (top), a three-column body, and StatusBar (footer). Body shows the left editor panel, ValuesPanel (middle), RenderedOutput (right) via a CSS grid with two 6px draggable splitters. Dragging a splitter resizes columns and persists weights to localStorage 'hp:layout:weights'; double-clicking a splitter resets to DEFAULT_WEIGHTS [1,1,1.2]; below the lg breakpoint the columns collapse to a vertical stack.",
-      "notes": "src/App.tsx, src/components/layout/ThreeColumnLayout.tsx. MIN_WEIGHT 0.25."
+      "definition_of_done": "App renders Toolbar (top), a three-column body, and StatusBar (footer). Body shows the left editor panel, ValuesPanel (middle), RenderedOutput (right) via a CSS grid with two 6px draggable splitters. Dragging a splitter resizes columns and persists weights to localStorage 'hp:layout:weights'; double-clicking a splitter resets to DEFAULT_WEIGHTS [1,1,1.2]; below the lg breakpoint the layout switches to a tabbed single-panel view (a tab bar with Chart/Template · Values · Rendered, one full-height panel shown at a time) so each panel — notably the Monaco editors — gets real height instead of a tall page-scrolling stack.",
+      "notes": "src/App.tsx (passes mode-aware tab labels), src/components/layout/ThreeColumnLayout.tsx (labels prop + mobileTab state; a useIsDesktop() matchMedia('(min-width:1024px)') hook — with a window resize fallback — gates the branches in JS so only the active layout mounts and each panel's Monaco editor exists once, not twice). MIN_WEIGHT 0.25."
     },
     {
       "id": "monaco-editing",
@@ -126,10 +126,10 @@
     },
     {
       "id": "gruvbox-theme-toggle",
-      "title": "Gruvbox light/dark theme with accent and corner controls",
+      "title": "Gruvbox light/dark theme with accent, corner, and CRT controls",
       "status": "done",
-      "definition_of_done": "ThemeButton toggles light/dark (theme-store.toggle adds/removes html.dark and persists 'hp:theme'), toggles sharp/rounded corners (border-store toggles html.sharp and persists 'hp:border'), and selects one of 7 accent swatches (writes CSS var --gv-accent and persists 'hp:accent'). index.html applies the persisted theme before paint to avoid a flash. Reloading the page preserves theme, accent, and corner style.",
-      "notes": "src/store/theme-store.ts, src/store/border-store.ts, src/components/theme/ThemeButton.tsx, src/styles/gruvbox.css, index.html. ACCENT_COLORS: aqua, blue, green, yellow, orange, red, purple."
+      "definition_of_done": "ThemeButton toggles light/dark (theme-store.toggle adds/removes html.dark and persists 'hp:theme'), toggles sharp/rounded corners (border-store toggles html.sharp and persists 'hp:border'), toggles a CRT scanlines overlay (crt-store toggles html.crt and persists 'hp:crt'), and selects one of 7 accent swatches (writes CSS var --gv-accent and persists 'hp:accent'). index.html applies the persisted theme, sharp, and crt classes before paint to avoid a flash. The CRT effect is a fixed, pointer-events:none html.crt body::after overlay (scanlines + faint RGB aperture grille + slow flicker) layered above all app chrome including modals/splash; the flicker is disabled under prefers-reduced-motion. Reloading the page preserves theme, accent, corner style, and CRT state.",
+      "notes": "src/store/theme-store.ts, src/store/border-store.ts, src/store/crt-store.ts, src/components/theme/ThemeButton.tsx (ScanLine icon), src/styles/gruvbox.css, src/styles/globals.css (html.crt overlay), index.html. ACCENT_COLORS: aqua, blue, green, yellow, orange, red, purple."
     },
     {
       "id": "supabase-shares-migration",
@@ -137,6 +137,13 @@
       "status": "done",
       "definition_of_done": "supabase/migrations/20260609000000_charthouse_shares.sql creates public.charthouse_shares (id text primary key, payload jsonb not null, created_at timestamptz not null default now()), creates index charthouse_shares_created_at_idx on created_at, and enables row level security. Applying it via 'supabase db push' against a linked project lets the service-role-keyed /api/share (SHARE_STORE=supabase) read and write the table (RLS bypassed by service_role; no policies defined intentionally).",
       "notes": "supabase/migrations/20260609000000_charthouse_shares.sql, supabase/config.toml (project_id playgrounds, Postgres 15). Optional backend; the default memory store needs no Supabase."
+    },
+    {
+      "id": "mobile-responsive-ui",
+      "title": "Mobile-responsive UI across every surface",
+      "status": "done",
+      "definition_of_done": "The whole app is usable down to ~360px and on touch devices, with no horizontal overflow. Toolbar wraps (flex-wrap) and its action buttons + mode toggle collapse to icon-only below sm (release/namespace inputs shrink). Below lg the three-pane body becomes a tabbed single-panel view so Monaco gets full height. Hover-only affordances work on touch: file-tree row actions (ch-row-actions) are forced visible under @media (hover:none), and the Upload menu closes on outside tap (not just mouseleave). RenderedOutput header compacts (topology label + helmVersion chip hidden below sm). The topology overlay is usable on a phone: the desktop side panel is hidden below lg and a selected node is shown in a dismissible bottom sheet, the legend is hidden below md, and the React Flow minimap is hidden at <=640px. Modal footers wrap; the splash screen scrolls on short screens. The viewport meta uses viewport-fit=cover and body sets -webkit-tap-highlight-color:transparent + overscroll-behavior:none.",
+      "notes": "src/components/layout/{ThreeColumnLayout,Toolbar}.tsx, src/App.tsx, src/components/editor/FileTree.tsx, src/components/output/RenderedOutput.tsx, src/components/topology/TopologyModal.tsx, src/components/splash/SplashScreen.tsx, src/components/ui/Modal.tsx, src/components/upload/UploadDropzone.tsx, src/components/{ui/ImportButton,share/ShareButton,theme/ThemeButton}.tsx, src/styles/globals.css, index.html. Verified: pnpm typecheck/test(10)/build green; cmd/server preview screenshotted at 375px (splash, tabbed editor, rendered, topology + node sheet) and 1280px (resizable grid unregressed)."
     },
     {
       "id": "share-id-collision-retry",
