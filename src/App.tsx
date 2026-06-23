@@ -72,6 +72,7 @@ export default function App() {
     <div className="h-full flex flex-col bg-gv-bg text-gv-fg">
       <Toolbar />
       <ThreeColumnLayout
+        labels={[mode === 'single' ? 'Template' : 'Chart', 'Values', 'Rendered']}
         left={
           <div key={mode} className="ch-panel-swap h-full">
             {mode === 'single' ? <SingleTemplatePanel /> : <TemplatePanel />}

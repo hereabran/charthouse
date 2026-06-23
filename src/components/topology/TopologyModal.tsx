@@ -49,11 +49,11 @@ export default function TopologyModal({ open, onClose }: { open: boolean; onClos
       aria-label="Resource topology"
     >
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gv-border bg-gv-bg2 shrink-0">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-gv-dim">
-          <Workflow size={13} className="text-gv-accent" />
+        <div className="flex items-center gap-2 flex-wrap min-w-0 text-[11px] uppercase tracking-wider text-gv-dim">
+          <Workflow size={13} className="text-gv-accent shrink-0" />
           <span>resource topology</span>
-          <span className="hp-chip">{graph.nodes.length} resources</span>
-          <span className="hp-chip">{graph.edges.length} links</span>
+          <span className="hp-chip whitespace-nowrap">{graph.nodes.length} resources</span>
+          <span className="hp-chip whitespace-nowrap">{graph.edges.length} links</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-2 flex-wrap justify-end">
@@ -81,7 +81,7 @@ export default function TopologyModal({ open, onClose }: { open: boolean; onClos
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex">
+      <div className="flex-1 min-h-0 flex relative">
         <div className="flex-1 min-w-0 relative">
           {empty ? (
             <div className="absolute inset-0 flex items-center justify-center text-gv-dim text-sm p-6 text-center">
@@ -93,9 +93,32 @@ export default function TopologyModal({ open, onClose }: { open: boolean; onClos
             <TopologyGraphView graph={graph} onSelect={setSelected} />
           )}
         </div>
+
+        {/* Desktop: persistent side panel. */}
         <div className="w-[420px] shrink-0 border-l border-gv-border bg-gv-bg2 hidden lg:flex flex-col min-h-0">
           <ResourcePanel node={selected} />
         </div>
+
+        {/* Mobile / tablet: the side panel is hidden, so surface the selected
+            resource as a dismissible bottom sheet over the graph. */}
+        {selected && (
+          <div className="lg:hidden absolute inset-x-0 bottom-0 top-1/3 z-10 flex flex-col border-t border-gv-border bg-gv-bg2 shadow-2xl ch-overlay-in">
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-gv-border shrink-0">
+              <span className="text-[11px] uppercase tracking-wider text-gv-dim">resource</span>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label="Close resource panel"
+                className="p-1 rounded text-gv-dim hover:text-gv-fg hover:bg-gv-bg3 focus:outline-none focus:ring-1 focus:ring-gv-accent"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ResourcePanel node={selected} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

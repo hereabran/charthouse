@@ -160,23 +160,23 @@ export function FileTree() {
             >
               {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               <span className="truncate">{n.name}</span>
-              <span className="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1">
+              <span className="ch-row-actions ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1.5">
                 <button
-                  className="hover:text-gv-accent"
+                  className="ch-icon-btn hover:text-gv-accent"
                   title="New file"
                   onClick={(e) => { e.stopPropagation(); promptNewFile(n.path) }}
                 >
                   <FilePlus size={12} />
                 </button>
                 <button
-                  className="hover:text-gv-accent"
+                  className="ch-icon-btn hover:text-gv-accent"
                   title="New folder"
                   onClick={(e) => { e.stopPropagation(); promptNewFolder(n.path) }}
                 >
                   <FolderPlus size={12} />
                 </button>
                 <button
-                  className="hover:text-gv-red"
+                  className="ch-icon-btn hover:text-gv-red"
                   title="Delete folder"
                   onClick={(e) => { e.stopPropagation(); confirmDelete(n.path, 'folder') }}
                 >
@@ -204,7 +204,7 @@ export function FileTree() {
           {iconForFile(n.name)}
           <span className="truncate">{n.name}</span>
           <button
-            className="ml-auto opacity-0 group-hover:opacity-100 hover:text-gv-red"
+            className="ch-row-actions ch-icon-btn ml-auto opacity-0 group-hover:opacity-100 hover:text-gv-red"
             title="Delete"
             onClick={(e) => { e.stopPropagation(); confirmDelete(n.path, 'file') }}
           >
@@ -220,10 +220,10 @@ export function FileTree() {
       <div className="flex items-center justify-between px-2 py-0.5 text-[10px] uppercase tracking-wider text-gv-dim">
         <span>files</span>
         <span className="flex items-center gap-1">
-          <button className="hover:text-gv-accent" title="New file at root" onClick={() => promptNewFile('')}>
+          <button className="ch-icon-btn hover:text-gv-accent" title="New file at root" onClick={() => promptNewFile('')}>
             <FilePlus size={12} />
           </button>
-          <button className="hover:text-gv-accent" title="New folder at root" onClick={() => promptNewFolder('')}>
+          <button className="ch-icon-btn hover:text-gv-accent" title="New folder at root" onClick={() => promptNewFolder('')}>
             <FolderPlus size={12} />
           </button>
         </span>

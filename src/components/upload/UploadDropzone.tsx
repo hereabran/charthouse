@@ -67,7 +67,18 @@ export function UploadButton() {
   const replaceAll = useChartStore((s) => s.replaceAll)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+
+  // Close on outside tap/click. (mouseleave alone never fires on touch.)
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
 
   const handleArchive = useCallback(
     async (file: File) => {
@@ -97,10 +108,10 @@ export function UploadButton() {
 
   return (
     <>
-      <div className="relative">
-        <button className="hp-btn" onClick={() => setOpen((v) => !v)} title="Upload chart">
+      <div ref={menuRef} className="relative">
+        <button className="hp-btn" onClick={() => setOpen((v) => !v)} title="Upload chart" aria-label="Upload chart">
           <Upload size={12} />
-          <span>upload</span>
+          <span className="hidden sm:inline">upload</span>
         </button>
         {open && (
           <div

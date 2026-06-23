@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Palette, Moon, Sun, Square, Circle, Check } from 'lucide-react'
+import { Palette, Moon, Sun, Square, Circle, Check, ScanLine } from 'lucide-react'
 import clsx from 'clsx'
 import { useThemeStore, ACCENT_COLORS } from '@/store/theme-store'
 import { useBorderStore } from '@/store/border-store'
+import { useCrtStore } from '@/store/crt-store'
 
 export function ThemeButton() {
   const theme = useThemeStore((s) => s.theme)
@@ -11,6 +12,8 @@ export function ThemeButton() {
   const setAccent = useThemeStore((s) => s.setAccent)
   const sharp = useBorderStore((s) => s.sharp)
   const toggleBorder = useBorderStore((s) => s.toggle)
+  const crt = useCrtStore((s) => s.crt)
+  const toggleCrt = useCrtStore((s) => s.toggle)
 
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -28,13 +31,13 @@ export function ThemeButton() {
 
   return (
     <div ref={ref} className="relative">
-      <button className="hp-btn" onClick={() => setOpen((o) => !o)} title="Theme settings">
+      <button className="hp-btn" onClick={() => setOpen((o) => !o)} title="Theme settings" aria-label="Theme settings">
         <Palette size={12} />
-        <span>theme</span>
+        <span className="hidden sm:inline">theme</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 z-20 w-52 border border-gv-border bg-gv-bg2 shadow-lg p-2 text-xs">
+        <div className="absolute right-0 mt-1 z-20 w-60 border border-gv-border bg-gv-bg2 shadow-lg p-2 text-xs">
           <button
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gv-bg3 text-gv-fg"
             onClick={toggleTheme}
@@ -51,14 +54,24 @@ export function ThemeButton() {
             <span>{sharp ? 'rounded' : 'sharp'} corners</span>
           </button>
 
+          <button
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gv-bg3 text-gv-fg"
+            onClick={toggleCrt}
+            aria-pressed={crt}
+          >
+            <ScanLine size={12} className={clsx(crt && 'text-gv-accent')} />
+            <span>CRT lines {crt ? 'off' : 'on'}</span>
+          </button>
+
           <div className="border-t border-gv-border mt-1 pt-1">
             <div className="px-2 py-1 text-[10px] text-gv-dim">accent</div>
-            <div className="flex items-center gap-1 px-2 py-1.5">
+            <div className="flex items-center gap-1.5 px-2 py-1.5">
               {ACCENT_COLORS.map((c) => (
                 <button
                   key={c.name}
+                  aria-label={`Accent ${c.name}`}
                   className={clsx(
-                    'w-5 h-5 rounded-full border-2 transition-colors',
+                    'w-6 h-6 rounded-full border-2 transition-colors',
                     accent === c.value
                       ? 'border-gv-fg scale-110'
                       : 'border-transparent hover:border-gv-dim',

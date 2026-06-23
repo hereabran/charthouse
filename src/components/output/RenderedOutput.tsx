@@ -95,21 +95,22 @@ export function RenderedOutput() {
           {!loading && !ok && <TriangleAlert size={12} className="text-gv-red" />}
         </span>
         <div className="flex items-center gap-2">
-          {helmVersion && <span className="hp-chip">{helmVersion}</span>}
+          {helmVersion && <span className="hp-chip hidden sm:inline-block">{helmVersion}</span>}
           {lastRenderedAt && <span className="hp-chip">{durationMs} ms</span>}
           <button
             className="hp-btn"
             onClick={() => setTopoOpen(true)}
             disabled={docs.length === 0}
             title="View the rendered resources as a topology graph"
+            aria-label="View resource topology"
           >
             <Workflow size={12} />
-            <span>topology</span>
+            <span className="hidden sm:inline">topology</span>
           </button>
-          <button className="hp-btn" onClick={copy} title="Copy">
+          <button className="hp-btn" onClick={copy} title="Copy" aria-label="Copy rendered output">
             <Copy size={12} />
           </button>
-          <button className="hp-btn" onClick={download} title="Download">
+          <button className="hp-btn" onClick={download} title="Download" aria-label="Download rendered output">
             <Download size={12} />
           </button>
         </div>
