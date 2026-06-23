@@ -3,17 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <title>Charthouse — Helm chart playground</title>
     <meta name="description" content="Charthouse — a realtime Helm chart playground: render templates live, explore resource topology, and share charts. Self-hostable and vendor-neutral." />
     <script>
-      // Apply persisted theme before paint to avoid flash.
+      // Apply persisted theme + toggles before paint to avoid a flash.
       try {
+        const root = document.documentElement;
         const t = localStorage.getItem('hp:theme');
         const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const dark = t ? t === 'dark' : sysDark;
-        document.documentElement.classList.toggle('dark', dark);
+        root.classList.toggle('dark', dark);
+        root.classList.toggle('sharp', localStorage.getItem('hp:border') === 'sharp');
+        root.classList.toggle('crt', localStorage.getItem('hp:crt') === 'crt');
       } catch {}
     </script>
   </head>

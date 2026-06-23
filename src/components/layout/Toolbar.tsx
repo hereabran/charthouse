@@ -19,14 +19,14 @@ export function Toolbar() {
   const [confirmReset, setConfirmReset] = useState(false)
 
   return (
-    <header className="flex items-center gap-3 px-3 py-2 border-b border-gv-border bg-gv-bg2 shrink-0">
-      <div className="flex items-center gap-2 mr-1">
-        <span className="text-gv-accent font-bold tracking-tight">⎈ Charthouse</span>
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 border-b border-gv-border bg-gv-bg2 shrink-0">
+      <div className="flex items-center gap-2">
+        <span className="text-gv-accent font-bold tracking-tight whitespace-nowrap">⎈ Charthouse</span>
         <span className="text-gv-dim text-xs hidden xl:inline">Helm chart playground</span>
       </div>
 
       <div
-        className="flex items-center border border-gv-border overflow-hidden rounded mr-1"
+        className="flex items-center border border-gv-border overflow-hidden rounded"
         role="group"
         aria-label="Editing mode"
       >
@@ -41,7 +41,7 @@ export function Toolbar() {
           aria-pressed={mode === 'chart'}
         >
           <FolderTree size={12} />
-          <span>Chart</span>
+          <span className="hidden sm:inline">Chart</span>
         </button>
         <button
           type="button"
@@ -54,41 +54,44 @@ export function Toolbar() {
           aria-pressed={mode === 'single'}
         >
           <FileCode size={12} />
-          <span>Single file</span>
+          <span className="hidden sm:inline">Single file</span>
         </button>
       </div>
 
-      <div className="flex items-center gap-1 text-[11px] text-gv-dim">
-        <label htmlFor="release" className="select-none">release</label>
-        <input
-          id="release"
-          className="hp-input w-28"
-          value={releaseName}
-          onChange={(e) => setReleaseName(e.target.value || 'demo')}
-          spellCheck={false}
-        />
-      </div>
-      <div className="flex items-center gap-1 text-[11px] text-gv-dim">
-        <label htmlFor="namespace" className="select-none">namespace</label>
-        <input
-          id="namespace"
-          className="hp-input w-28"
-          value={namespace}
-          onChange={(e) => setNamespace(e.target.value || 'default')}
-          spellCheck={false}
-        />
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 text-[11px] text-gv-dim">
+          <label htmlFor="release" className="select-none">release</label>
+          <input
+            id="release"
+            className="hp-input w-24 sm:w-28"
+            value={releaseName}
+            onChange={(e) => setReleaseName(e.target.value || 'demo')}
+            spellCheck={false}
+          />
+        </div>
+        <div className="flex items-center gap-1 text-[11px] text-gv-dim">
+          <label htmlFor="namespace" className="select-none">namespace</label>
+          <input
+            id="namespace"
+            className="hp-input w-24 sm:w-28"
+            value={namespace}
+            onChange={(e) => setNamespace(e.target.value || 'default')}
+            spellCheck={false}
+          />
+        </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
         <ImportButton />
         <UploadButton />
         <button
           className="hp-btn"
           title="Reset to sample chart"
+          aria-label="Reset to sample chart"
           onClick={() => setConfirmReset(true)}
         >
           <RotateCcw size={12} />
-          <span>reset</span>
+          <span className="hidden sm:inline">reset</span>
         </button>
         <ShareButton />
         <ThemeButton />
@@ -98,9 +101,10 @@ export function Toolbar() {
           target="_blank"
           rel="noreferrer"
           title="Helm template guide"
+          aria-label="Helm template guide"
         >
           <Github size={12} />
-          <span>docs</span>
+          <span className="hidden sm:inline">docs</span>
         </a>
       </div>
 

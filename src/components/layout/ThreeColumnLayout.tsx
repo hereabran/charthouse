@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import clsx from 'clsx'
+import { FileCode, SlidersHorizontal, FileOutput } from 'lucide-react'
 
-type Props = { left: ReactNode; middle: ReactNode; right: ReactNode }
+type Props = {
+  left: ReactNode
+  middle: ReactNode
+  right: ReactNode
+  /** Tab labels for the mobile (< lg) tabbed view, in [left, middle, right] order. */
+  labels?: [string, string, string]
+}
 
 const STORAGE_KEY = 'hp:layout:weights'
 const SPLITTER_PX = 6
@@ -26,8 +34,36 @@ function loadWeights(): [number, number, number] {
   return DEFAULT_WEIGHTS
 }
 
-export function ThreeColumnLayout({ left, middle, right }: Props) {
+// Tailwind `lg`. We gate the two layouts on this in JS (not just CSS) so only the
+// active branch is mounted — otherwise both the tabbed and the grid layout render
+// at once and every panel's Monaco editor is instantiated twice.
+const LG_QUERY = '(min-width: 1024px)'
+
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window === 'undefined' ? true : window.matchMedia(LG_QUERY).matches,
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia(LG_QUERY)
+    const onChange = () => setIsDesktop(mq.matches)
+    onChange()
+    // `change` covers real resizes; `resize` is a belt-and-suspenders fallback
+    // for environments that don't dispatch MediaQueryList change events.
+    mq.addEventListener('change', onChange)
+    window.addEventListener('resize', onChange)
+    return () => {
+      mq.removeEventListener('change', onChange)
+      window.removeEventListener('resize', onChange)
+    }
+  }, [])
+  return isDesktop
+}
+
+export function ThreeColumnLayout({ left, middle, right, labels }: Props) {
   const [weights, setWeights] = useState<[number, number, number]>(loadWeights)
+  const [mobileTab, setMobileTab] = useState<0 | 1 | 2>(0)
+  const isDesktop = useIsDesktop()
   const containerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{
     idx: 0 | 1
@@ -100,35 +136,69 @@ export function ThreeColumnLayout({ left, middle, right }: Props) {
 
   const cols = `minmax(220px, ${weights[0]}fr) ${SPLITTER_PX}px minmax(220px, ${weights[1]}fr) ${SPLITTER_PX}px minmax(260px, ${weights[2]}fr)`
 
+  const tabLabels = labels ?? ['Template', 'Values', 'Rendered']
+  const tabIcons = [FileCode, SlidersHorizontal, FileOutput] as const
+  const panes = [left, middle, right]
+
+  // Mobile / tablet (< lg): one full-height panel at a time behind a tab bar. A
+  // tall vertical stack would force the page to scroll and starve each Monaco
+  // editor of height, so we switch panes instead. Only this OR the grid mounts.
+  if (!isDesktop) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div role="tablist" aria-label="Panels" className="flex shrink-0 border-b border-gv-border bg-gv-bg2">
+          {tabLabels.map((label, i) => {
+            const Icon = tabIcons[i]
+            const active = mobileTab === i
+            return (
+              <button
+                key={i}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setMobileTab(i as 0 | 1 | 2)}
+                className={clsx(
+                  'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] uppercase tracking-wider transition-colors border-b-2',
+                  active
+                    ? 'border-gv-accent text-gv-accent'
+                    : 'border-transparent text-gv-dim hover:text-gv-fg hover:bg-gv-bg3',
+                )}
+              >
+                <Icon size={13} />
+                <span className="truncate">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex-1 min-h-0 p-2">
+          {panes.map((pane, i) => (
+            <div key={i} className={clsx('h-full min-h-0', mobileTab === i ? 'block' : 'hidden')}>
+              {pane}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <>
-      <div className="flex-1 min-h-0 flex flex-col gap-2 p-2 lg:hidden">
-        <section className="min-h-[40vh]">{left}</section>
-        <section className="min-h-[40vh]">{middle}</section>
-        <section className="min-h-[40vh]">{right}</section>
-      </div>
-      <div
-        ref={containerRef}
-        className="hidden lg:grid flex-1 min-h-0 p-2"
-        style={{ gridTemplateColumns: cols }}
-      >
-        <section className="min-w-0 min-h-0 overflow-hidden">{left}</section>
-        <Splitter
-          onPointerDown={onSplitterDown(0)}
-          onPointerMove={onSplitterMove}
-          onPointerUp={onSplitterUp}
-          onDoubleClick={resetSizes}
-        />
-        <section className="min-w-0 min-h-0 overflow-hidden">{middle}</section>
-        <Splitter
-          onPointerDown={onSplitterDown(1)}
-          onPointerMove={onSplitterMove}
-          onPointerUp={onSplitterUp}
-          onDoubleClick={resetSizes}
-        />
-        <section className="min-w-0 min-h-0 overflow-hidden">{right}</section>
-      </div>
-    </>
+    <div ref={containerRef} className="grid flex-1 min-h-0 p-2" style={{ gridTemplateColumns: cols }}>
+      <section className="min-w-0 min-h-0 overflow-hidden">{left}</section>
+      <Splitter
+        onPointerDown={onSplitterDown(0)}
+        onPointerMove={onSplitterMove}
+        onPointerUp={onSplitterUp}
+        onDoubleClick={resetSizes}
+      />
+      <section className="min-w-0 min-h-0 overflow-hidden">{middle}</section>
+      <Splitter
+        onPointerDown={onSplitterDown(1)}
+        onPointerMove={onSplitterMove}
+        onPointerUp={onSplitterUp}
+        onDoubleClick={resetSizes}
+      />
+      <section className="min-w-0 min-h-0 overflow-hidden">{right}</section>
+    </div>
   )
 }
 

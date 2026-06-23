@@ -119,7 +119,20 @@ module is `charthouse` (`go.mod`), the npm package is `charthouse`
   `Handler` exports unchanged; Supabase is just `SHARE_STORE=supabase` + the
   migration under `supabase/migrations/` (table `charthouse_shares`).
 - **Gruvbox theme:** light/dark toggle, accent colors, sharp/rounded corner
-  toggle, all persisted in `localStorage`.
+  toggle, and a **CRT scanlines** toggle (`src/store/crt-store.ts` → `html.crt`;
+  a fixed, click-through `body::after` overlay in `globals.css` with scanlines +
+  faint RGB grille + slow flicker, flicker disabled under
+  `prefers-reduced-motion`). All persisted in `localStorage`
+  (`hp:theme`/`hp:accent`/`hp:border`/`hp:crt`) and applied pre-paint from
+  `index.html` to avoid a flash.
+- **Mobile / responsive:** the whole UI works down to ~360px and on touch. The
+  Toolbar wraps and its buttons + mode toggle go icon-only below `sm`; below
+  `lg` the 3-pane body becomes a **tabbed single-panel view** (Chart/Template ·
+  Values · Rendered) so Monaco gets full height. Hover-only affordances have
+  touch paths (file-tree row actions forced visible under `@media (hover:none)`;
+  Upload menu closes on outside tap). The topology overlay shows a selected node
+  in a dismissible bottom sheet below `lg` (the desktop side panel is hidden),
+  legend hidden below `md`, minimap hidden ≤640px.
 - **Upload + import + share:**
   - **Upload / drag-drop:** parses `.zip` (JSZip), `.tgz` / `.tar.gz`
     (pako + hand-written tar parser), or a folder, client-side; top-level chart
@@ -218,6 +231,69 @@ and define done before starting.
 ---
 
 ## Session log
+
+### 2026-06-24 — Mobile-responsive UI everywhere + CRT scanlines theme toggle
+
+- **Changed:**
+  - **CRT scanlines toggle.** New `src/store/crt-store.ts` (mirrors
+    `border-store`: boolean → `html.crt`, persists `hp:crt`). Added the effect to
+    `src/styles/globals.css` as a fixed, `pointer-events:none`
+    `html.crt body::after` overlay (scanlines + faint RGB aperture grille + a
+    slow `ch-crt-flicker`), `z-index` above modals/splash; flicker disabled under
+    `prefers-reduced-motion`. Wired a "CRT lines on/off" entry (ScanLine icon)
+    into `ThemeButton`. `index.html` pre-paint now also applies `sharp` + `crt`
+    classes (no flash) and the viewport meta gained `viewport-fit=cover`.
+  - **Mobile-responsive across every surface.**
+    - `ThreeColumnLayout`: below `lg`, the tall vertical stack is replaced by a
+      **tabbed single-panel view** (tab bar Chart/Template · Values · Rendered;
+      one full-height panel at a time) so Monaco gets real height. Desktop
+      resizable grid unchanged. `App.tsx` passes mode-aware tab labels. A
+      `useIsDesktop()` matchMedia hook (with a `window` `resize` fallback) gates
+      the two layouts in JS so **only the active branch mounts** — each panel's
+      Monaco editor exists once (was twice: both branches were CSS-toggled).
+    - `Toolbar`: `flex-wrap`; action buttons + mode toggle collapse to icon-only
+      below `sm`; release/namespace inputs shrink. No 360px overflow.
+    - Touch fixes: file-tree row actions tagged `ch-row-actions` and forced
+      visible under `@media (hover:none)`; `UploadButton` menu now closes on
+      outside tap (was `onMouseLeave`-only).
+    - `RenderedOutput` header compacts (topology label + helmVersion chip hidden
+      below `sm`). `TopologyModal` shows a selected node in a dismissible bottom
+      sheet below `lg` (desktop side panel hidden), legend hidden below `md`,
+      React Flow minimap hidden ≤640px. `Modal` footer wraps. `SplashScreen`
+      scrolls on short screens. Body gets `-webkit-tap-highlight-color:transparent`
+      + `overscroll-behavior:none`.
+  - Labels on `ImportButton` / `ShareButton` / `ThemeButton` hidden below `sm`
+    (icon-only) for the compact mobile toolbar.
+- **Verified (commands run this session, all passed):**
+  - `pnpm typecheck` → 0 errors. `pnpm test` → 10/10. `pnpm build` → OK
+    (topology still split into its own lazy chunk).
+  - `go build ./...` / `go vet ./...` → clean.
+  - **Browser (cmd/server embedded SPA via `pnpm serve`):** screenshotted at
+    **375×812** — splash, tabbed editor (CHART), live-rendered output (Service +
+    Deployment via Helm v4.2.0 SDK), topology graph + the new node bottom sheet —
+    and at **1280×820** confirming the desktop resizable 3-column grid is
+    unregressed. Toggled **CRT on** (visible scanlines, `html` class `dark crt`,
+    `hp:crt=crt`) and off. No console errors. Confirmed the built CSS contains
+    the `@media (hover:none) .ch-row-actions`, `html.crt body::after`, and
+    `ch-crt-flicker` rules.
+  - An adversarial multi-agent review workflow swept all surfaces for missed
+    mobile/CRT cases and desktop regressions; it confirmed 3 findings, all
+    fixed: (a) file-tree row-action icon buttons had ~12px tap targets — added
+    `.ch-icon-btn` (≥28px hit box under `@media (hover:none)`); (b) accent
+    swatches were 20px — bumped to 24px (`w-6 h-6`) in a wider menu; (c) the two
+    layout branches both mounted, doubling Monaco to 6 editors — fixed via the
+    `useIsDesktop` JS gate. Re-verified live: `monaco.editor.getEditors().length`
+    is now 3 at both 375px (tabbed) and 1280px (grid).
+- **Left / next:** Real-device touch pass (the preview is a desktop browser, so
+  `@media (hover:none)` and pinch-zoom on the topology canvas were verified by
+  rule-presence + emulation, not on hardware). Docker image still unbuilt here.
+- **Handoff:** Theme/border/CRT all live in tiny zustand stores applied via
+  `html` classes and pre-painted from `index.html`; add future toggles the same
+  way. The mobile/desktop layout split keys off Tailwind `lg` (1024px) via a
+  `useIsDesktop()` matchMedia hook in `ThreeColumnLayout` — only the active
+  branch mounts (so each panel/Monaco editor exists once). If you add a third
+  layout, gate it through the same hook rather than CSS `hidden` toggles, or
+  you'll re-introduce duplicate editors.
 
 ### 2026-06-09 — Charthouse: rebrand, two modes, topology viewer, single-binary server + pluggable shares + Docker
 

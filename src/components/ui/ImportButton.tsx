@@ -42,9 +42,9 @@ export function ImportButton() {
 
   return (
     <>
-      <button className="hp-btn" onClick={openModal} title="Import from URL">
+      <button className="hp-btn" onClick={openModal} title="Import from URL" aria-label="Import from URL">
         <LinkIcon size={12} />
-        <span>import</span>
+        <span className="hidden sm:inline">import</span>
       </button>
 
       <Modal

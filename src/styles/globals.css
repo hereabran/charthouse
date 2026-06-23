@@ -19,6 +19,10 @@
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-feature-settings: 'liga' 0;
     -webkit-font-smoothing: antialiased;
+    /* Mobile polish: kill the grey tap flash and the rubber-band scroll that
+       fights Monaco / the topology canvas on touch. */
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
   /* Scrollbar tuned to Gruvbox */
   *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -117,6 +121,10 @@ html.sharp .rounded-full {
 .ch-flow .react-flow__controls-button svg { fill: var(--gv-fg); }
 .ch-flow .react-flow__minimap { background: var(--gv-bg2); }
 .ch-flow .react-flow__attribution { display: none; }
+/* The minimap eats too much of a phone screen; hide it on small viewports. */
+@media (max-width: 640px) {
+  .ch-flow .react-flow__minimap { display: none; }
+}
 
 /* --- transitions: mode switch + topology open/close --- */
 @keyframes ch-overlay-in {
@@ -139,4 +147,52 @@ html.sharp .rounded-full {
 @media (prefers-reduced-motion: reduce) {
   .ch-overlay-in, .ch-overlay-out, .ch-panel-swap,
   .splash-icon, .splash-btn, .splash-fade { animation: none !important; }
+  html.crt body::after { animation: none !important; }
+}
+
+/* --- CRT scanlines overlay (theme toggle: html.crt) --- */
+/* A fixed, click-through layer over the whole app: horizontal scanlines plus a
+   faint RGB aperture grille and a slow flicker, for the retro-terminal mood.
+   Sits above everything (modals, splash, topology) but never intercepts input. */
+html.crt body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, 0) 1.5px,
+      rgba(0, 0, 0, 0.16) 1.5px,
+      rgba(0, 0, 0, 0.16) 3px
+    ),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 0, 0, 0.045) 0,
+      rgba(0, 255, 0, 0.02) 1px,
+      rgba(0, 0, 255, 0.045) 2px,
+      transparent 3px
+    );
+  animation: ch-crt-flicker 5s ease-in-out infinite;
+}
+@keyframes ch-crt-flicker {
+  0%, 100% { opacity: 0.9; }
+  50%      { opacity: 1; }
+}
+
+/* On touch / hover-less devices there is no hover to reveal row actions
+   (file-tree create/delete buttons), so keep them permanently visible — and
+   give the small icon buttons a real (>=28px) tap target so a near-miss doesn't
+   hit the row underneath (which would select/expand instead of act). */
+@media (hover: none) {
+  .ch-row-actions { opacity: 1 !important; }
+  .ch-icon-btn {
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
